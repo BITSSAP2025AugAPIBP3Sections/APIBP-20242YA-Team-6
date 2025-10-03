@@ -1,0 +1,15 @@
+{
+  "name": "event-platform",
+  "private": true,
+  "workspaces": [
+    "gateway",
+    "services/*",
+    "libs/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w gateway && npm run build --workspaces --if-present",
+    "dev:gateway": "npm run dev -w gateway",
+    "dev:auth": "npm run dev -w services/auth || echo 'auth (Node) not present'",
+    "dev:tasks": "npm run dev -w services/tasks || echo 'tasks (Node) not present'"
+  }
+}

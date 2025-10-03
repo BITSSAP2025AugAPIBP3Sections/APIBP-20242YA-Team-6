@@ -1,0 +1,112 @@
+# -----------------------------------------------------------------------------
+# Root .gitignore (polyglot: Node.js / TypeScript / Python / Java / Misc)
+# Adjust per service as needed; keep this focused on build + local artifacts.
+# -----------------------------------------------------------------------------
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.orig
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs & runtime
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.pid
+*.pid.lock
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!gateway/.env.example
+!services/**/.env.example
+!libs/**/.env.example
+
+# Node / TypeScript
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.eslintcache
+.parcel-cache/
+.turbo/
+.pnpm-store/
+
+# Generated GraphQL / OpenAPI (when added)
+**/generated/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.coverage*
+htmlcov/
+.hypothesis/
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+
+# Java / JVM
+target/
+out/
+*.iml
+.classpath
+.project
+.settings/
+
+# Package managers (keep lockfiles you use; ignore stray)
+package-lock.backup*.json
+
+# Docker / compose auxiliary
+docker-compose.override.yml
+**/.docker-cache/
+
+# Task runners / build caches
+.gradle/
+.task/
+.cache/
+/.tmp/
+tmp/
+temp/
+
+# Coverage / reports (generic)
+reports/
+test-results/
+
+# Misc
+*.tgz
+*.zip
+*.tar
+*.tar.gz
+*.tmp
+*.bak
+*.backup
+
+# Ignore local service scratch files
+services/**/scratch/
+
+# Allow README / docs everywhere
+!**/README.md
+!docs/**
+
+# -----------------------------------------------------------------------------
+# End of file
+# -----------------------------------------------------------------------------
