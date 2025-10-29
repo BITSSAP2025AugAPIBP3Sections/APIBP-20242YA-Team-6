@@ -111,3 +111,4 @@ services/**/scratch/
 # End of file
 # -----------------------------------------------------------------------------
 .vscode/settings.json
+package-lock.json

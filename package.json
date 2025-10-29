@@ -2,14 +2,22 @@
   "name": "event-platform",
   "private": true,
   "workspaces": [
-    "gateway",
     "services/*",
     "libs/*"
   ],
   "scripts": {
-    "build": "npm run build -w gateway && npm run build --workspaces --if-present",
-    "dev:gateway": "npm run dev -w gateway",
+    "build": "npm run build --workspaces --if-present",
     "dev:auth": "npm run dev -w services/auth || echo 'auth (Node) not present'",
-    "dev:tasks": "npm run dev -w services/tasks || echo 'tasks (Node) not present'"
+    "dev:tasks": "npm run dev -w services/tasks || echo 'tasks (Node) not present'",
+    "dev:notifications": "npm run dev -w services/notifications || echo 'notifications (Node) not present'",
+    "dev:attendees": "npm run dev -w services/attendees || echo 'attendees (Node) not present'",
+    "install:all": "npm install && npm run install:python",
+    "install:python": "make install-python",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

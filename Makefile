@@ -12,6 +12,27 @@ help: ## Show available targets
 install: ## Install JS workspaces (safe even if some services are non-Node)
 	@if [ -f package.json ]; then npm install || true; fi
 
+.PHONY: install-all
+install-all: ## Install all dependencies (Node.js and Python)
+	@echo "🔧 Installing dependencies for all services..."
+	@chmod +x scripts/install-deps.sh
+	@scripts/install-deps.sh
+
+.PHONY: install-node
+install-node: ## Install only Node.js dependencies
+	@echo "📦 Installing Node.js dependencies..."
+	@npm install
+
+.PHONY: install-python
+install-python: ## Install only Python dependencies
+	@echo "🐍 Installing Python dependencies..."
+	@for service in events vendors; do \
+		if [ -f "services/$$service/requirements.txt" ]; then \
+			echo "Installing dependencies for $$service service..."; \
+			cd "services/$$service" && pip install -r requirements.txt && cd ../..; \
+		fi; \
+	done
+
 .PHONY: build
 build: ## Build gateway + any TS node services present
 	@if [ -f package.json ]; then npm run build || true; fi
