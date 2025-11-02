@@ -341,3 +341,132 @@ paths:
           description: Unauthorized — JWT token missing or invalid
         "500":
           description: Internal server error
+
+  ##############################
+  # ATTENDEE SERVICE
+  ##############################
+  /attendees:
+    get:
+      tags: [Attendees]
+      summary: Get all attendees
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of attendees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendee"
+ 
+  /attendees/{id}:
+    get:
+      tags: [Attendees]
+      summary: Get attendee by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attendee found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendee"
+ 
+  /events/{eventId}/attendees:
+    get:
+      tags: [Attendees]
+      summary: List attendees for a specific event
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of event attendees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendee"
+ 
+    post:
+      tags: [Attendees]
+      summary: RSVP for an event
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [going, interested, not_going]
+      responses:
+        "201":
+          description: RSVP created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendee"
+
+  ##############################
+  # NOTIFICATIONS SERVICE
+  ##############################
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get notifications for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+ 
+    post:
+      tags: [Notifications]
+      summary: Send a notification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Notification"
+      responses:
+        "201":
+          description: Notification sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
