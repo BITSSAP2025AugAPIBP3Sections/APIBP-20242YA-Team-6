@@ -26,7 +26,7 @@ install-node: ## Install only Node.js dependencies
 .PHONY: install-python
 install-python: ## Install only Python dependencies
 	@echo "🐍 Installing Python dependencies..."
-	@for service in events vendors; do \
+	@for service in vendors; do \
 		if [ -f "services/$$service/requirements.txt" ]; then \
 			echo "Installing dependencies for $$service service..."; \
 			cd "services/$$service" && pip install -r requirements.txt && cd ../..; \

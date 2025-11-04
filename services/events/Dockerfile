@@ -1,8 +1,8 @@
-FROM python:3.12-slim
+FROM node:20-alpine
 WORKDIR /app
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ ./src
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN if [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm install --frozen-lockfile; else npm install --production=false; fi
+COPY src ./src
 EXPOSE 8002
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8002"]
+ENV NODE_ENV=production
+CMD ["node", "src/index.js"]

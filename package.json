@@ -7,7 +7,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "dev:auth": "npm run dev -w services/auth || echo 'auth (Node) not present'",
+    "dev:events": "npm run dev -w services/events || echo 'events (Node) not present'",
     "dev:tasks": "npm run dev -w services/tasks || echo 'tasks (Node) not present'",
     "dev:notifications": "npm run dev -w services/notifications || echo 'notifications (Node) not present'",
     "dev:attendees": "npm run dev -w services/attendees || echo 'attendees (Node) not present'",
