@@ -7,9 +7,7 @@ info:
     Supports JWT-based authentication and modular microservice structure.
 
 servers:
-  - url: https://api.eventmanager.com/v1
-    description: Production server
-  - url: http://localhost:4000/v1
+  - url: http://localhost:8000/v1
     description: Local development server
 
 tags:
@@ -174,6 +172,16 @@ paths:
                 properties:
                   token:
                     type: string
+        "400":
+          description: Bad request - Invalid email format or missing required fields
+        "401":
+          description: Unauthorized - Invalid credentials
+        "422":
+          description: Validation error - Request body validation failed
+        "429":
+          description: Too many requests - Rate limit exceeded
+        "500":
+          description: Internal server error
 
   /auth/register:
     post:
@@ -201,6 +209,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "400":
+          description: Bad request - Invalid input data
+        "409":
+          description: Conflict - Email already exists
+        "422":
+          description: Validation error - Request body validation failed
+        "429":
+          description: Too many requests - Rate limit exceeded
+        "500":
+          description: Internal server error
 
   /auth/me:
     get:
@@ -215,6 +233,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "500":
+          description: Internal server error
 
   ##############################
   # EVENTS SERVICE
@@ -236,6 +260,8 @@ paths:
                   $ref: "#/components/schemas/Event"
         "401":
           description: Unauthorized — JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
         "500":
           description: Internal server error
  
@@ -261,6 +287,10 @@ paths:
           description: Invalid request body or missing required fields
         "401":
           description: Unauthorized — JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "422":
+          description: Validation error - Request body validation failed
         "500":
           description: Internal server error
  
@@ -283,10 +313,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Event"
-        "404":
-          description: Invalid event ID
         "401":
           description: Unauthorized — JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
         "500":
           description: Internal server error
     
@@ -317,6 +349,12 @@ paths:
           description: Invalid request body or missing required fields
         "401":
           description: Unauthorized — JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
+        "422":
+          description: Validation error - Request body validation failed
         "500":
           description: Internal server error
 
@@ -335,10 +373,14 @@ paths:
       responses:
         "204":
           description: Event deleted successfully
-        "404":
-          description: Invalid event ID
         "401":
           description: Unauthorized — JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
+        "409":
+          description: Conflict - Cannot delete event with existing dependencies
         "500":
           description: Internal server error
 
@@ -360,6 +402,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Attendee"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "500":
+          description: Internal server error
  
   /attendees/{id}:
     get:
@@ -380,6 +428,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Attendee"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Attendee not found - Invalid attendee ID
+        "500":
+          description: Internal server error
  
   /events/{eventId}/attendees:
     get:
@@ -402,6 +458,14 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Attendee"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
+        "500":
+          description: Internal server error
  
     post:
       tags: [Attendees]
@@ -432,103 +496,167 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Attendee"
+        "400":
+          description: Bad request - Invalid RSVP status or missing required fields
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
+        "409":
+          description: Conflict - RSVP already exists for this user and event
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
 
-    ##############################
-    # VENDORS SERVICE
-    ##############################
-    /vendors:
-      get:
-        tags: [ Vendors ]
-        summary: List all vendors
-        security:
-          - bearerAuth: [ ]
-        responses:
-          "200":
-            description: List of vendors
-            content:
-              application/json:
-                schema:
-                  type: array
-                  items:
-                    $ref: "#/components/schemas/Vendor"
+  ##############################
+  # VENDORS SERVICE
+  ##############################
+  /vendors:
+    get:
+      tags: [Vendors]
+      summary: List all vendors
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of vendors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "500":
+          description: Internal server error
 
-      post:
-        tags: [ Vendors ]
-        summary: Create vendor
-        security:
-          - bearerAuth: [ ]
-        requestBody:
+    post:
+      tags: [Vendors]
+      summary: Create vendor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Vendor"
+      responses:
+        "201":
+          description: Vendor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+        "400":
+          description: Bad request - Invalid input data or missing required fields
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "409":
+          description: Conflict - Vendor already exists with same email
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
+
+  /vendors/{id}:
+    get:
+      tags: [Vendors]
+      summary: Get vendor by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
           required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Vendor found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Vendor"
-        responses:
-          "201":
-            description: Vendor created
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/Vendor"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Vendor not found - Invalid vendor ID
+        "500":
+          description: Internal server error
 
-    /vendors/{id}:
-      get:
-        tags: [ Vendors ]
-        summary: Get vendor by ID
-        security:
-          - bearerAuth: [ ]
-        parameters:
-          - name: id
-            in: path
-            required: true
+    patch:
+      tags: [Vendors]
+      summary: Update vendor
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
             schema:
-              type: string
-        responses:
-          "200":
-            description: Vendor found
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/Vendor"
-
-      patch:
-        tags: [ Vendors ]
-        summary: Update vendor
-        security:
-          - bearerAuth: [ ]
-        parameters:
-          - name: id
-            in: path
-            required: true
-            schema:
-              type: string
-        requestBody:
+              $ref: "#/components/schemas/Vendor"
+      responses:
+        "200":
+          description: Updated vendor
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Vendor"
-        responses:
-          "200":
-            description: Updated vendor
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/Vendor"
+        "400":
+          description: Bad request - Invalid input data
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Vendor not found - Invalid vendor ID
+        "409":
+          description: Conflict - Email already exists for another vendor
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
 
-      delete:
-        tags: [ Vendors ]
-        summary: Delete vendor
-        security:
-          - bearerAuth: [ ]
-        parameters:
-          - name: id
-            in: path
-            required: true
-            schema:
-              type: string
-        responses:
-          "204":
-            description: Vendor deleted successfully
+    delete:
+      tags: [Vendors]
+      summary: Delete vendor
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Vendor deleted successfully
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Vendor not found - Invalid vendor ID
+        "409":
+          description: Conflict - Cannot delete vendor with existing dependencies
+        "500":
+          description: Internal server error
 
   ##############################
   # NOTIFICATIONS SERVICE
@@ -548,6 +676,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Notification"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "500":
+          description: Internal server error
  
     post:
       tags: [Notifications]
@@ -567,6 +701,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Notification"
+        "400":
+          description: Bad request - Invalid notification data or missing required fields
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Recipient not found - Invalid recipient ID
+        "422":
+          description: Validation error - Request body validation failed
+        "429":
+          description: Too many requests - Notification rate limit exceeded
+        "500":
+          description: Internal server error
   
   ##############################
   # TASKS SERVICE
@@ -586,6 +734,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Task"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "500":
+          description: Internal server error
  
     post:
       tags: [Tasks]
@@ -605,6 +759,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Task"
+        "400":
+          description: Bad request - Invalid task data or missing required fields
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event or vendor not found - Invalid event ID or vendor ID
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
  
   /tasks/{id}:
     get:
@@ -625,6 +791,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Task"
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Task not found - Invalid task ID
+        "500":
+          description: Internal server error
  
     patch:
       tags: [Tasks]
@@ -649,6 +823,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Task"
+        "400":
+          description: Bad request - Invalid task data
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Task not found - Invalid task ID
+        "409":
+          description: Conflict - Task status transition not allowed
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
  
     delete:
       tags: [Tasks]
@@ -664,3 +852,13 @@ paths:
       responses:
         "204":
           description: Task deleted successfully
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Task not found - Invalid task ID
+        "409":
+          description: Conflict - Cannot delete task in progress or with dependencies
+        "500":
+          description: Internal server error
