@@ -1,0 +1,341 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: auth-service
+    url: http://auth-service:8001
+    tags:
+      - auth
+    
+  - name: events-service
+    url: http://events-service:8002
+    tags:
+      - events
+    
+  - name: vendors-service
+    url: http://vendors-service:8003
+    tags:
+      - vendors
+    
+  - name: tasks-service
+    url: http://tasks-service:8004
+    tags:
+      - tasks
+    
+  - name: attendees-service
+    url: http://attendees-service:8005
+    tags:
+      - attendees
+    
+  - name: notifications-service
+    url: http://notifications-service:8006
+    tags:
+      - notifications
+
+routes:
+  # ==================== AUTH ROUTES (PUBLIC) ====================
+  - name: auth-register
+    service:
+      name: auth-service
+    paths:
+      - /v1/auth/register
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - "*"
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+          headers:
+            - Accept
+            - Authorization
+            - Content-Type
+          exposed_headers:
+            - X-Auth-Token
+          credentials: true
+          max_age: 3600
+      - name: rate-limiting
+        config:
+          minute: 10
+          policy: local
+    
+  - name: auth-login
+    service:
+      name: auth-service
+    paths:
+      - /v1/auth/login
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 20
+          policy: local
+
+  # ==================== AUTH ROUTES (PROTECTED) ====================
+  - name: auth-me
+    service:
+      name: auth-service
+    paths:
+      - /v1/auth/me
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+
+  # ==================== EVENTS ROUTES ====================
+  - name: events-list
+    service:
+      name: events-service
+    paths:
+      - /v1/events
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  - name: events-create
+    service:
+      name: events-service
+    paths:
+      - /v1/events
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+
+  - name: events-detail
+    service:
+      name: events-service
+    paths:
+      - ~/v1/events/(?<id>\d+)$
+    methods:
+      - GET
+      - PATCH
+      - DELETE
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  # ==================== VENDORS ROUTES ====================
+  - name: vendors-list
+    service:
+      name: vendors-service
+    paths:
+      - /v1/vendors
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  - name: vendors-create
+    service:
+      name: vendors-service
+    paths:
+      - /v1/vendors
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+
+  - name: vendors-detail
+    service:
+      name: vendors-service
+    paths:
+      - ~/v1/vendors/(?<id>\d+)$
+    methods:
+      - GET
+      - PATCH
+      - DELETE
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  # ==================== TASKS ROUTES ====================
+  - name: tasks-list
+    service:
+      name: tasks-service
+    paths:
+      - /v1/tasks
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  - name: tasks-create
+    service:
+      name: tasks-service
+    paths:
+      - /v1/tasks
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+
+  - name: tasks-detail
+    service:
+      name: tasks-service
+    paths:
+      - ~/v1/tasks/(?<id>\d+)$
+    methods:
+      - GET
+      - PATCH
+      - DELETE
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  # ==================== ATTENDEES ROUTES ====================
+  - name: attendees-list
+    service:
+      name: attendees-service
+    paths:
+      - /v1/attendees
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  - name: attendees-detail
+    service:
+      name: attendees-service
+    paths:
+      - ~/v1/attendees/(?<id>\d+)$
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+
+  - name: attendees-by-event
+    service:
+      name: attendees-service
+    paths:
+      - ~/v1/events/(?<eventId>[^/]+)/attendees$
+    methods:
+      - GET
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  # ==================== NOTIFICATIONS ROUTES ====================
+  - name: notifications-list
+    service:
+      name: notifications-service
+    paths:
+      - /v1/notifications
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 100
+          policy: local
+
+  - name: notifications-create
+    service:
+      name: notifications-service
+    paths:
+      - /v1/notifications
+    methods:
+      - POST
+    strip_path: false
+    plugins:
+      - name: cors
+      - name: rate-limiting
+        config:
+          minute: 50
+          policy: local
+
+  # ==================== HEALTH CHECK ROUTES ====================
+  - name: health-checks
+    service:
+      name: auth-service
+    paths:
+      - /health
+    methods:
+      - GET
+    strip_path: false
+    plugins:
+      - name: cors
+
+# Global Plugins
+plugins:
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+      echo_downstream: true
+  
+  - name: request-size-limiting
+    config:
+      allowed_payload_size: 10
+      size_unit: megabytes
+  
+  - name: response-ratelimiting
+    enabled: false

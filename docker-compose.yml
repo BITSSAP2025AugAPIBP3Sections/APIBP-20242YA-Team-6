@@ -1,10 +1,12 @@
-
 services:
+  # Message brokers
   nats:
     image: nats:2-alpine
     ports:
       - "4222:4222"
     restart: unless-stopped
+    networks:
+      - event-management-net
 
   kafka:
     image: bitnami/kafka:3.7
@@ -21,87 +23,92 @@ services:
       - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=1
       - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
       - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=1
-      # Required for single-node KRaft mode (controller quorum voters list id@host:controllerPort)
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
     restart: unless-stopped
+    networks:
+      - event-management-net
 
-  kong-gateway:
-    image: kong:3.4-alpine
-    environment:
-      - KONG_DATABASE=off
-      - KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml
-      - KONG_PROXY_ACCESS_LOG=/dev/stdout
-      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
-      - KONG_PROXY_ERROR_LOG=/dev/stderr
-      - KONG_ADMIN_ERROR_LOG=/dev/stderr
-      - KONG_ADMIN_LISTEN=0.0.0.0:8001
-      - KONG_PROXY_LISTEN=0.0.0.0:8000
-    ports:
-      - "8080:8000"   # Proxy port (main API gateway)
-      - "8001:8001"   # Admin API port
+  # Kong Enterprise Gateway Database
+  kong-ee-database:
+    container_name: kong-ee-database
+    image: postgres:16-alpine
+    restart: on-failure
     volumes:
-      - ./kong/kong-simple.yml:/kong/declarative/kong.yml
-    depends_on:
-      - auth-service
-      - events-service
-      - vendors-service
-      - tasks-service
-      - attendees-service
-      - notifications-service
-
-  auth-service:
-    build: ./services/auth
-    env_file:
-      - ./services/auth/.env.example
-    ports:
-      - "8001:8001"
-    depends_on:
-      - auth-db
-      - nats
-
-  events-service:
-    build: ./services/events
-    ports:
-      - "8002:8002"
-    depends_on:
-      - events-db
-      - nats
-
-  vendors-service:
-    build: ./services/vendors
-    ports:
-      - "8003:8003"
-    depends_on:
-      - vendors-db
-      - nats
-
-  tasks-service:
-    build: ./services/tasks
-    ports:
-      - "8004:8004"
-    depends_on:
-      - tasks-db
-      - nats
-
-  attendees-service:
-    build: ./services/attendees
-    ports:
-      - "8005:8005"
-    depends_on:
-      - attendees-db
-      - nats
-
-  notifications-service:
-    build: ./services/notifications
-    ports:
-      - "8006:8006"
+      - kong_db_data:/var/lib/postgresql
+    networks:
+      - event-management-net
     environment:
-      - KAFKA_BROKERS=kafka:9092
-      - PORT=8006
-    depends_on:
-      - kafka
-      - nats
+      POSTGRES_USER: kong
+      POSTGRES_DB: kong
+      POSTGRES_PASSWORD: kong
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+    ports:
+      - '5432:5432'
 
+  # Kong Bootstrap (Database Migration)
+  kong-bootstrap:
+    image: kong/kong:latest
+    container_name: kong-bootstrap
+    networks:
+      - event-management-net
+    depends_on:
+      kong-ee-database:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-ee-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_PASSWORD: handyshake
+    command: kong migrations bootstrap
+
+  # Kong Enterprise Control Plane
+  kong-cp:
+    image: kong/kong:latest
+    container_name: kong-cp
+    restart: on-failure
+    networks:
+      - event-management-net
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-ee-database
+      KONG_PG_DATABASE: kong
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001, 0.0.0.0:8444 ssl
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002, 0.0.0.0:8445 ssl
+      KONG_ADMIN_GUI_URL: http://${GW_HOST:-localhost}:8002
+      KONG_PASSWORD: handyshake
+    depends_on:
+      kong-bootstrap:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_started
+      events-service:
+        condition: service_started
+      vendors-service:
+        condition: service_started
+      tasks-service:
+        condition: service_started
+      attendees-service:
+        condition: service_started
+      notifications-service:
+        condition: service_started
+    ports:
+      - "8000:8000"  # Proxy HTTP
+      - "8443:8443"  # Proxy HTTPS
+      - "8001:8001"  # Admin API HTTP
+      - "8444:8444"  # Admin API HTTPS
+      - "8002:8002"  # Kong Manager HTTP
+      - "8445:8445"  # Kong Manager HTTPS
+
+  # PostgreSQL Databases
   auth-db:
     image: postgres:16-alpine
     environment:
@@ -112,6 +119,9 @@ services:
       - auth_pg_data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
+    networks:
+      - event-management-net
+    restart: unless-stopped
 
   events-db:
     image: postgres:16-alpine
@@ -123,6 +133,9 @@ services:
       - events_pg_data:/var/lib/postgresql/data
     ports:
       - "5434:5432"
+    networks:
+      - event-management-net
+    restart: unless-stopped
 
   vendors-db:
     image: postgres:16-alpine
@@ -134,6 +147,9 @@ services:
       - vendors_pg_data:/var/lib/postgresql/data
     ports:
       - "5435:5432"
+    networks:
+      - event-management-net
+    restart: unless-stopped
 
   tasks-db:
     image: postgres:16-alpine
@@ -145,6 +161,9 @@ services:
       - tasks_pg_data:/var/lib/postgresql/data
     ports:
       - "5436:5432"
+    networks:
+      - event-management-net
+    restart: unless-stopped
 
   attendees-db:
     image: postgres:16-alpine
@@ -156,10 +175,136 @@ services:
       - attendees_pg_data:/var/lib/postgresql/data
     ports:
       - "5437:5432"
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  # Microservices
+  auth-service:
+    build: 
+      context: ./services/auth
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://auth:authpw@auth-db:5432/auth
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - PORT=8001
+    ports:
+      - "3001:8001"
+    depends_on:
+      - auth-db
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  events-service:
+    build: 
+      context: ./services/events
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=events-db
+      - DB_USER=events
+      - DB_PASSWORD=eventspw
+      - DB_NAME=events
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - PORT=8002
+    ports:
+      - "3002:8002"
+    depends_on:
+      - events-db
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  vendors-service:
+    build: 
+      context: ./services/vendors
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://vendors:vendorspw@vendors-db:5432/vendors
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - PORT=8003
+    ports:
+      - "3003:8003"
+    depends_on:
+      - vendors-db
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  tasks-service:
+    build: 
+      context: ./services/tasks
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=tasks-db
+      - DB_USER=tasks
+      - DB_PASSWORD=taskspw
+      - DB_NAME=tasks
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - PORT=8004
+    ports:
+      - "3004:8004"
+    depends_on:
+      - tasks-db
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  attendees-service:
+    build: 
+      context: ./services/attendees
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=attendees-db
+      - DB_USER=attendees
+      - DB_PASSWORD=attendeespw
+      - DB_NAME=attendees
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - PORT=8005
+    ports:
+      - "3005:8005"
+    depends_on:
+      - attendees-db
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
+
+  notifications-service:
+    build: 
+      context: ./services/notifications
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - KAFKA_BROKERS=kafka:9092
+      - PORT=8006
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+    ports:
+      - "3006:8006"
+    depends_on:
+      - kafka
+      - nats
+    networks:
+      - event-management-net
+    restart: unless-stopped
 
 volumes:
+  kong_db_data:
   auth_pg_data:
   events_pg_data:
   vendors_pg_data:
   tasks_pg_data:
   attendees_pg_data:
+
+networks:
+  event-management-net:
+    driver: bridge
