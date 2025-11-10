@@ -120,12 +120,12 @@ services:
         name: attendees-by-event
         path_handling: v0
         paths:
-          - ~/v1/events/[^/]+/attendees
+          - ~/v1/events/\d+/attendees
         preserve_host: false
         protocols:
           - http
           - https
-        regex_priority: 0
+        regex_priority: 100
         request_buffering: true
         response_buffering: true
         strip_path: false
