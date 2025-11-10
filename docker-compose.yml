@@ -17,9 +17,19 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+      # Auto create topics and improve startup
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_NUM_PARTITIONS: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
     restart: unless-stopped
     networks:
       - event-management-net
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Kong Enterprise Gateway Database
   kong-ee-database:
@@ -69,7 +79,7 @@ services:
     networks:
       - event-management-net
     volumes:
-      - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
+      - ./kong/kong.yml/kong.yaml:/usr/local/kong/declarative/kong.yml:ro
     environment:
       KONG_DATABASE: postgres
       KONG_PG_HOST: kong-ee-database
@@ -283,10 +293,17 @@ services:
     ports:
       - "3006:8006"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
     networks:
       - event-management-net
     restart: unless-stopped
+    # Add retry logic for Kafka connection
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
 volumes:
   kong_db_data:
