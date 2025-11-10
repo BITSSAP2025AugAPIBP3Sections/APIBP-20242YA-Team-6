@@ -6,31 +6,67 @@ services:
     url: http://auth-service:8001
     tags:
       - auth
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 50
+          hour: 1000
+          policy: local
     
   - name: events-service
     url: http://events-service:8002
     tags:
       - events
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 5000
+          policy: local
     
   - name: vendors-service
     url: http://vendors-service:8003
     tags:
       - vendors
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 5000
+          policy: local
     
   - name: tasks-service
     url: http://tasks-service:8004
     tags:
       - tasks
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 5000
+          policy: local
     
   - name: attendees-service
     url: http://attendees-service:8005
     tags:
       - attendees
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 100
+          hour: 5000
+          policy: local
     
   - name: notifications-service
     url: http://notifications-service:8006
     tags:
       - notifications
+    plugins:
+      - name: rate-limiting
+        config:
+          minute: 80
+          hour: 3000
+          policy: local
 
 routes:
   # ==================== AUTH ROUTES (PUBLIC) ====================
@@ -62,10 +98,6 @@ routes:
             - X-Auth-Token
           credentials: true
           max_age: 3600
-      - name: rate-limiting
-        config:
-          minute: 10
-          policy: local
     
   - name: auth-login
     service:
@@ -77,10 +109,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 20
-          policy: local
 
   # ==================== AUTH ROUTES (PROTECTED) ====================
   - name: auth-me
@@ -105,10 +133,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   - name: events-create
     service:
@@ -120,10 +144,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 30
-          policy: local
 
   - name: events-detail
     service:
@@ -137,10 +157,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   # ==================== VENDORS ROUTES ====================
   - name: vendors-list
@@ -153,10 +169,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   - name: vendors-create
     service:
@@ -168,10 +180,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 30
-          policy: local
 
   - name: vendors-detail
     service:
@@ -185,10 +193,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   # ==================== TASKS ROUTES ====================
   - name: tasks-list
@@ -201,10 +205,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   - name: tasks-create
     service:
@@ -216,10 +216,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 30
-          policy: local
 
   - name: tasks-detail
     service:
@@ -233,10 +229,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   # ==================== ATTENDEES ROUTES ====================
   - name: attendees-list
@@ -249,10 +241,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   - name: attendees-detail
     service:
@@ -276,10 +264,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   # ==================== NOTIFICATIONS ROUTES ====================
   - name: notifications-list
@@ -292,10 +276,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: local
 
   - name: notifications-create
     service:
@@ -307,10 +287,6 @@ routes:
     strip_path: false
     plugins:
       - name: cors
-      - name: rate-limiting
-        config:
-          minute: 50
-          policy: local
 
   # ==================== HEALTH CHECK ROUTES ====================
   - name: health-checks
