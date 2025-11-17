@@ -167,7 +167,7 @@ Once everything is running:
 
 - **Kong Gateway (API)**: http://localhost:8000
 - **Kong Admin API**: http://localhost:8001
-- **Test UI**: http://localhost:8080
+- **Test UI**: http://localhost:3000
 - **Individual Services** (if needed for debugging):
   - Auth Service: Check docker-compose.yml for port
   - Events Service: Check docker-compose.yml for port
@@ -217,7 +217,7 @@ docker-compose exec <db-service-name> psql -U <username> -d <database>
 
 ### **API Testing**
 
-Use the test UI at http://localhost:8080 to:
+Use the test UI at http://localhost:3000 to:
 - Test authentication endpoints
 - Create and manage events
 - Test vendor and attendee operations
