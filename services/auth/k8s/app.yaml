@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: event-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -z auth-db 5432; do echo waiting for db; sleep 2; done']
+      containers:
+        - name: auth-service
+          image: kaifcoder/auth-service:v1
+          ports:
+            - containerPort: 8001
+          env:
+            - name: ENVIRONMENT
+              value: development
+            - name: PORT
+              value: "8001"
+            - name: DATABASE_URL
+              value: postgresql://auth:authpw@auth-db:5432/auth
+            - name: SECRET_KEY
+              value: your-super-secret-jwt-key-change-in-production
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
