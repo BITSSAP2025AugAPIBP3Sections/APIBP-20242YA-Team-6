@@ -66,12 +66,16 @@ Follow these steps to set up and run the complete Event Management Platform loca
 cd APIBP-20242YA-Team-6
 ```
 
-### **Step 2: Start Services with Docker Compose**
+### **Step 2: Set up Environment File**
+
+Copy `.env.example` to `.env` in the notifications service directory and set the values.
+
+### **Step 3: Start Services with Docker Compose**
 
 Start all backend services (databases, APIs, Kong gateway):
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:
@@ -83,22 +87,23 @@ This will start:
 Wait for all services to be healthy. You can check the status with:
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
-### **Step 3: Install and Configure Kong with Deck**
+### **Step 4: Install and Configure Kong with Deck**
 
 #### **Install Deck (Kong's Configuration Management Tool)**
 
 **For macOS:**
 ```bash
-# Using Homebrew
-brew install deck
+# Install Kong Deck using Homebrew (recommended)
+brew install kong/deck/deck
+```
 
-# Or download binary directly
-curl -sL https://github.com/Kong/deck/releases/latest/download/deck_darwin_amd64.tar.gz -o deck.tar.gz
-tar -xf deck.tar.gz -C /tmp
-sudo cp /tmp/deck /usr/local/bin/
+**Note:** If you have a different `deck` tool installed, you may need to uninstall it first:
+```bash
+brew uninstall deck
+brew install kong/deck/deck
 ```
 
 **For Linux:**
@@ -111,16 +116,13 @@ sudo cp /tmp/deck /usr/local/bin/
 
 **For Windows:**
 ```bash
-# Using Scoop
-scoop install deck
-
-# Or download from GitHub releases
+# Download from GitHub releases
 # https://github.com/Kong/deck/releases/latest
 ```
 
 #### **Verify Deck Installation**
 ```bash
-deck version
+deck --version
 ```
 
 #### **Configure Kong Gateway**
@@ -150,7 +152,7 @@ curl http://localhost:8001/services
 curl http://localhost:8001/routes
 ```
 
-### **Step 4: Run Test UI**
+### **Step 5: Run Test UI**
 
 Start the test UI using Python's built-in HTTP server:
 
@@ -161,7 +163,7 @@ python3 -m http.server 3000
 
 The test UI will be available at: **http://localhost:3000**
 
-### **Step 5: Access the Application**
+### **Step 6: Access the Application**
 
 Once everything is running:
 
