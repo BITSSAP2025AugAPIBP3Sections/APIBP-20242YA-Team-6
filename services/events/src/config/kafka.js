@@ -14,9 +14,9 @@ export async function initKafka() {
   try {
     producer = kafka.producer();
     await producer.connect();
-    console.log('✅ Kafka producer connected');
+    console.log('Kafka producer connected');
   } catch (error) {
-    console.error('⚠️  Kafka connection failed:', error.message);
+    console.error('Kafka connection failed:', error.message);
   }
 }
 
