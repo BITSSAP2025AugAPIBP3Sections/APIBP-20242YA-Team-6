@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-service
+  namespace: event-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notifications-service
+  template:
+    metadata:
+      labels:
+        app: notifications-service
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -z kafka.kafka.svc.cluster.local 9092; do echo waiting for kafka; sleep 2; done']
+      containers:
+        - name: notifications-service
+          image: kaifcoder/notifications-service:v1
+          ports:
+            - containerPort: 8006
+          env:
+            - name: PORT
+              value: "8006"
+            - name: KAFKA_BROKERS
+              value: kafka.kafka.svc.cluster.local:9092
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-secrets
+                  key: JWT_SECRET
+            - name: EMAIL_ENABLED
+              value: "true"
+            - name: EMAIL_HOST
+              value: smtp.gmail.com
+            - name: NODE_ENV
+              value: development
+            - name: EMAIL_PORT
+              value: "587"
+            - name: EMAIL_FROM
+              value: noreply@eventmanagement.com
+            - name: EMAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-secrets
+                  key: EMAIL_USER
+            - name: EMAIL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: notifications-secrets
+                  key: EMAIL_PASS
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
