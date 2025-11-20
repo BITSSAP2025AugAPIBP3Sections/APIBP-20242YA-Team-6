@@ -112,3 +112,4 @@ services/**/scratch/
 # -----------------------------------------------------------------------------
 .vscode/settings.json
 package-lock.json
+services/notifications/k8s/secrets.yml
