@@ -40,11 +40,11 @@ spec:
             - name: JWT_SECRET
               value: your-super-secret-jwt-key-change-in-production
             - name: KAFKA_BROKERS
-              value: kafka:9092
+              value: kafka.kafka.svc.cluster.local:9092
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: "128Mi"
+              cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "256Mi"
+              cpu: "200m"
