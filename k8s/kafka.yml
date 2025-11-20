@@ -1,0 +1,232 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: kafka
+spec:
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: kafka
+    - port: 9093
+      targetPort: 9093
+      name: controller
+  selector:
+    app: kafka
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: set-permissions
+          image: busybox:latest
+          securityContext:
+            runAsUser: 0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Setting permissions on /tmp/kraft-combined-logs..."
+              chown -R 1000:1000 /tmp/kraft-combined-logs
+              chmod -R 755 /tmp/kraft-combined-logs
+              # Remove lost+found directory if it exists
+              if [ -d /tmp/kraft-combined-logs/lost+found ]; then
+                echo "Removing lost+found directory..."
+                rm -rf /tmp/kraft-combined-logs/lost+found
+              fi
+              ls -la /tmp/kraft-combined-logs
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /tmp/kraft-combined-logs
+      containers:
+        - name: kafka
+          image: apache/kafka:3.7.0
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          command:
+            - sh
+            - -c
+            - |
+              # Create server.properties
+              cat > /tmp/server.properties << 'EOF'
+              process.roles=broker,controller
+              node.id=1
+              controller.quorum.voters=1@127.0.0.1:9093
+              listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+              controller.listener.names=CONTROLLER
+              advertised.listeners=PLAINTEXT://kafka.kafka.svc.cluster.local:9092
+              inter.broker.listener.name=PLAINTEXT
+              listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+              log.dirs=/tmp/kraft-combined-logs
+              offsets.topic.replication.factor=1
+              transaction.state.log.replication.factor=1
+              transaction.state.log.min.isr=1
+              auto.create.topics.enable=true
+              num.partitions=1
+              default.replication.factor=1
+              EOF
+              
+              # Format storage if not already formatted
+              if [ ! -f /tmp/kraft-combined-logs/meta.properties ]; then
+                echo "Formatting Kafka storage..."
+                /opt/kafka/bin/kafka-storage.sh format -t MkU3OEVBNTcwNTJENDM2Qk -c /tmp/server.properties
+              fi
+              
+              # Start Kafka
+              exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+          ports:
+            - containerPort: 9092
+              name: kafka
+            - containerPort: 9093
+              name: controller
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /tmp/kraft-combined-logs
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          readinessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9092
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            successThreshold: 1
+            failureThreshold: 5
+      volumes:
+        - name: kafka-data
+          persistentVolumeClaim:
+            claimName: kafka-data-pvc
+---
+# Persistent Volume Claim for Kafka Data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-data-pvc
+  namespace: kafka
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Kafka UI for monitoring and management (optional but helpful)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  namespace: kafka
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: ui
+  selector:
+    app: kafka-ui
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  namespace: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+        - name: kafka-ui
+          image: provectuslabs/kafka-ui:latest
+          ports:
+            - containerPort: 8080
+              name: ui
+          env:
+            - name: KAFKA_CLUSTERS_0_NAME
+              value: "local"
+            - name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS
+              value: "kafka:9092"
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+---
+# Ingress for Kafka UI
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kafka-ui-ingress
+  namespace: kafka
+spec:
+  ingressClassName: istio
+  rules:
+    - host: kafka-ui.c-282f7f4.kyma.ondemand.com
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: kafka-ui
+              port:
+                number: 8080
+  tls:
+    - hosts:
+      - kafka-ui.c-282f7f4.kyma.ondemand.com
+      secretName: kyma-gateway-certs
