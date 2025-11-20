@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z events-db 5432; do echo waiting for events db; sleep 2; done']
       containers:
         - name: events-service
-          image: meenu155/event-service:v2
+          image: meenu155/event-service:v3
           ports:
             - containerPort: 8002
           env:
@@ -57,8 +57,8 @@ spec:
             failureThreshold: 3
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: "128Mi"
+              cpu: "50m"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "246Mi"
+              cpu: "200m"
