@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendees-db
+  namespace: event-management
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: attendees-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendees-service
+  namespace: event-management
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8005
+      targetPort: 8005
+      protocol: TCP
+      name: http
+  selector:
+    app: attendees-service
