@@ -9,6 +9,8 @@ info:
 servers:
   - url: http://localhost:8000/v1
     description: Local development server
+  - url: https://event-management-api.c-282f7f4.kyma.ondemand.com/v1
+    description: Production server
 
 tags:
   - name: Auth
@@ -315,18 +317,168 @@ paths:
   /events:
     get:
       tags: [Events]
-      summary: List all events
+      summary: List all events with advanced filtering, sorting, and pagination
+      description: |
+        Retrieve a paginated list of events with support for:
+        - **Pagination**: Use `page` and `page_size` parameters
+        - **Sorting**: Use `sort_by` and `sort_order` parameters
+        - **Filtering**: Filter by name, location, organizerId, or use global search
+        - **Field Selection**: Use `fields` parameter to specify which fields to return
       security:
         - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (starts from 1)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of events per page (max 100)
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [id, name, location, startAt, endAt, organizerId, createdAt]
+            default: id
+          description: Field to sort by
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Sort order (ascending or descending)
+        - name: fields
+          in: query
+          schema:
+            type: string
+          description: Comma-separated list of fields to return (e.g., "id,name,location")
+          example: "id,name,startAt,location"
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Filter by event name (partial match, case-insensitive)
+        - name: location
+          in: query
+          schema:
+            type: string
+          description: Filter by event location (partial match, case-insensitive)
+        - name: organizerId
+          in: query
+          schema:
+            type: string
+          description: Filter by organizer ID (exact match)
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Global search across name, description, and location fields
       responses:
         "200":
-          description: List of events
+          description: List of events with pagination metadata
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Event"
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+                  pagination:
+                    type: object
+                    properties:
+                      current_page:
+                        type: integer
+                        description: Current page number
+                      page_size:
+                        type: integer
+                        description: Number of items per page
+                      total_count:
+                        type: integer
+                        description: Total number of events matching filters
+                      total_pages:
+                        type: integer
+                        description: Total number of pages
+                      has_next:
+                        type: boolean
+                        description: Whether there are more pages
+                      has_previous:
+                        type: boolean
+                        description: Whether there are previous pages
+                      next_page:
+                        type: integer
+                        nullable: true
+                        description: Next page number if available
+                      previous_page:
+                        type: integer
+                        nullable: true
+                        description: Previous page number if available
+                  filters:
+                    type: object
+                    nullable: true
+                    description: Applied filters
+                    properties:
+                      name:
+                        type: string
+                      location:
+                        type: string
+                      organizerId:
+                        type: string
+                      search:
+                        type: string
+                  sorting:
+                    type: object
+                    description: Applied sorting
+                    properties:
+                      sort_by:
+                        type: string
+                      sort_order:
+                        type: string
+              examples:
+                paginatedEvents:
+                  summary: Example paginated events response
+                  value:
+                    events:
+                      - id: "1"
+                        name: "Tech Conference 2025"
+                        description: "Annual technology conference"
+                        location: "San Francisco"
+                        startAt: "2025-03-15T09:00:00Z"
+                        endAt: "2025-03-17T18:00:00Z"
+                        organizerId: "123"
+                      - id: "2"
+                        name: "Music Festival"
+                        description: "Summer music festival"
+                        location: "Los Angeles"
+                        startAt: "2025-06-20T12:00:00Z"
+                        endAt: "2025-06-22T23:00:00Z"
+                        organizerId: "124"
+                    pagination:
+                      current_page: 1
+                      page_size: 10
+                      total_count: 25
+                      total_pages: 3
+                      has_next: true
+                      has_previous: false
+                      next_page: 2
+                      previous_page: null
+                    filters:
+                      location: "San"
+                    sorting:
+                      sort_by: "startAt"
+                      sort_order: "asc"
+        "400":
+          description: Bad request - Invalid query parameters
         "401":
           description: Unauthorized — JWT token missing or invalid
         "403":

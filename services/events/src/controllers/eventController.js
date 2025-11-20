@@ -3,12 +3,179 @@ import { publishNotification } from '../config/kafka.js';
 import { getUserEmail } from '../utils/externalServices.js';
 import { getEventStakeholders } from '../utils/stakeholders.js';
 
+function buildPaginationInfo(page, pageSize, totalCount) {
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const hasNext = page < totalPages;
+  const hasPrev = page > 1;
+  
+  return {
+    current_page: page,
+    page_size: pageSize,
+    total_count: totalCount,
+    total_pages: totalPages,
+    has_next: hasNext,
+    has_previous: hasPrev,
+    next_page: hasNext ? page + 1 : null,
+    previous_page: hasPrev ? page - 1 : null
+  };
+}
+
+function applyFilters(conditions, values, filters) {
+  let paramCount = values.length + 1;
+  
+  if (filters.name) {
+    conditions.push(`name ILIKE $${paramCount++}`);
+    values.push(`%${filters.name}%`);
+  }
+  if (filters.location) {
+    conditions.push(`location ILIKE $${paramCount++}`);
+    values.push(`%${filters.location}%`);
+  }
+  if (filters.organizerId) {
+    conditions.push(`organizer_id = $${paramCount++}`);
+    values.push(filters.organizerId);
+  }
+  if (filters.search) {
+    conditions.push(`(name ILIKE $${paramCount} OR description ILIKE $${paramCount} OR location ILIKE $${paramCount})`);
+    values.push(`%${filters.search}%`);
+    paramCount++;
+  }
+  
+  return paramCount;
+}
+
+function selectFields(eventData, fields) {
+  if (!fields || fields.length === 0) {
+    return eventData;
+  }
+  
+  const validFields = ['id', 'name', 'description', 'location', 'startAt', 'endAt', 'organizerId'];
+  const invalidFields = fields.filter(f => !validFields.includes(f));
+  
+  if (invalidFields.length > 0) {
+    throw new Error(`Invalid fields: ${invalidFields.join(', ')}. Valid fields: ${validFields.join(', ')}`);
+  }
+  
+  const result = {};
+  fields.forEach(field => {
+    if (eventData.hasOwnProperty(field)) {
+      result[field] = eventData[field];
+    }
+  });
+  
+  return result;
+}
+
 export async function getAllEvents(req, res) {
   try {
-    const result = await pool.query(
-      'SELECT id, name, description, location, start_at as "startAt", end_at as "endAt", organizer_id as "organizerId" FROM events ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
+    // Parse query parameters
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 10));
+    const sortBy = req.query.sort_by || 'id';
+    const sortOrder = (req.query.sort_order || 'asc').toLowerCase();
+    const fields = req.query.fields ? req.query.fields.split(',').map(f => f.trim()).filter(f => f) : null;
+    
+    // Parse filters
+    const filters = {
+      name: req.query.name,
+      location: req.query.location,
+      organizerId: req.query.organizerId,
+      search: req.query.search
+    };
+    
+    // Validate sort parameters
+    const validSortFields = ['id', 'name', 'location', 'startAt', 'endAt', 'organizerId', 'createdAt'];
+    const fieldMapping = {
+      'id': 'id',
+      'name': 'name',
+      'location': 'location',
+      'startAt': 'start_at',
+      'endAt': 'end_at',
+      'organizerId': 'organizer_id',
+      'createdAt': 'created_at'
+    };
+    
+    if (!validSortFields.includes(sortBy)) {
+      return res.status(400).json({ 
+        detail: `Invalid sort field. Must be one of: ${validSortFields.join(', ')}` 
+      });
+    }
+    
+    if (!['asc', 'desc'].includes(sortOrder)) {
+      return res.status(400).json({ 
+        detail: 'Invalid sort order. Must be "asc" or "desc"' 
+      });
+    }
+    
+    // Build WHERE conditions
+    const conditions = [];
+    const values = [];
+    applyFilters(conditions, values, filters);
+    
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    // Get total count
+    const countQuery = `SELECT COUNT(*) FROM events ${whereClause}`;
+    const countResult = await pool.query(countQuery, values);
+    const totalCount = parseInt(countResult.rows[0].count);
+    
+    // Build and execute main query
+    const sortColumn = fieldMapping[sortBy];
+    const offset = (page - 1) * pageSize;
+    
+    const dataQuery = `
+      SELECT 
+        id, 
+        name, 
+        description, 
+        location, 
+        start_at as "startAt", 
+        end_at as "endAt", 
+        organizer_id as "organizerId",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM events 
+      ${whereClause}
+      ORDER BY ${sortColumn} ${sortOrder.toUpperCase()}
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+    `;
+    
+    const dataResult = await pool.query(dataQuery, [...values, pageSize, offset]);
+    
+    // Apply field selection if specified
+    let events = dataResult.rows;
+    if (fields) {
+      try {
+        events = events.map(event => selectFields(event, fields));
+      } catch (error) {
+        return res.status(400).json({ detail: error.message });
+      }
+    }
+    
+    // Build pagination info
+    const paginationInfo = buildPaginationInfo(page, pageSize, totalCount);
+    
+    // Build applied filters object
+    const appliedFilters = {};
+    if (filters.name) appliedFilters.name = filters.name;
+    if (filters.location) appliedFilters.location = filters.location;
+    if (filters.organizerId) appliedFilters.organizerId = filters.organizerId;
+    if (filters.search) appliedFilters.search = filters.search;
+    
+    const sortingInfo = {
+      sort_by: sortBy,
+      sort_order: sortOrder
+    };
+    
+    // Build response
+    const response = {
+      events: events,
+      pagination: paginationInfo,
+      filters: Object.keys(appliedFilters).length > 0 ? appliedFilters : null,
+      sorting: sortingInfo
+    };
+    
+    res.json(response);
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ detail: 'Internal server error' });
