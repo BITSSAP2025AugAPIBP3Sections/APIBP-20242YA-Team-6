@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tasks-service
+  namespace: event-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tasks-service
+  template:
+    metadata:
+      labels:
+        app: tasks-service
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -z tasks-db 5432; do echo waiting for db; sleep 2; done']
+      containers:
+        - name: tasks-service
+          image: shrutim07/tasks-service:v1
+          ports:
+            - containerPort: 8004
+          env:
+            - name: ENVIRONMENT
+              value: development
+            - name: PORT
+              value: "8004"
+            - name: DB_HOST
+              value: tasks-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: tasks
+            - name: DB_USER
+              value: tasks
+            - name: DB_PASSWORD
+              value: taskspw
+            - name: SECRET_KEY
+              value: your-super-secret-jwt-key-change-in-production
+            - name: KAFKA_BROKERS
+              value: kafka.kafka.svc.cluster.local:9092
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "20m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
