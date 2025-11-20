@@ -88,8 +88,77 @@ components:
           format: email
         phone:
           type: string
+          nullable: true
         eventId:
           type: string
+    
+    VendorCreate:
+      type: object
+      required: [name, email, eventId]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        eventId:
+          type: string
+    
+    VendorUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        eventId:
+          type: string
+    
+    PaginatedVendorResponse:
+      type: object
+      properties:
+        vendors:
+          type: array
+          items:
+            type: object
+        pagination:
+          type: object
+          properties:
+            current_page:
+              type: integer
+            page_size:
+              type: integer
+            total_count:
+              type: integer
+            total_pages:
+              type: integer
+            has_next:
+              type: boolean
+            has_previous:
+              type: boolean
+            next_page:
+              type: integer
+              nullable: true
+            previous_page:
+              type: integer
+              nullable: true
+        filters:
+          type: object
+          nullable: true
+        sorting:
+          type: object
+          properties:
+            sort_by:
+              type: string
+            sort_order:
+              type: string
 
     Task:
       type: object
@@ -517,18 +586,79 @@ paths:
   /vendors:
     get:
       tags: [Vendors]
-      summary: List all vendors
+      summary: List vendors with advanced filtering, sorting, pagination, and field selection
       security:
         - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number (starts from 1)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of vendors per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [id, name, email, phone, eventId]
+            default: id
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - name: fields
+          in: query
+          description: Comma-separated list of fields to return
+          schema:
+            type: string
+            example: "id,name,email"
+        - name: name
+          in: query
+          description: Filter by vendor name (partial match)
+          schema:
+            type: string
+        - name: email
+          in: query
+          description: Filter by vendor email (partial match)
+          schema:
+            type: string
+        - name: phone
+          in: query
+          description: Filter by vendor phone (partial match)
+          schema:
+            type: string
+        - name: eventId
+          in: query
+          description: Filter by event ID (partial match)
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: Global search across all text fields
+          schema:
+            type: string
       responses:
         "200":
-          description: List of vendors
+          description: Paginated list of vendors
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Vendor"
+                $ref: "#/components/schemas/PaginatedVendorResponse"
+        "400":
+          description: Bad request - Invalid query parameters
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
@@ -546,7 +676,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Vendor"
+              $ref: "#/components/schemas/VendorCreate"
       responses:
         "201":
           description: Vendor created
@@ -570,7 +700,7 @@ paths:
   /vendors/{id}:
     get:
       tags: [Vendors]
-      summary: Get vendor by ID
+      summary: Get vendor by ID with optional field selection
       security:
         - bearerAuth: []
       parameters:
@@ -578,14 +708,22 @@ paths:
           in: path
           required: true
           schema:
+            type: integer
+        - name: fields
+          in: query
+          description: Comma-separated list of fields to return
+          schema:
             type: string
+            example: "id,name,email"
       responses:
         "200":
           description: Vendor found
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Vendor"
+                type: object
+        "400":
+          description: Bad request - Invalid field selection
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
@@ -605,12 +743,12 @@ paths:
           in: path
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Vendor"
+              $ref: "#/components/schemas/VendorUpdate"
       responses:
         "200":
           description: Updated vendor
@@ -643,7 +781,7 @@ paths:
           in: path
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "204":
           description: Vendor deleted successfully
