@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: events-service
+  namespace: event-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: events-service
+  template:
+    metadata:
+      labels:
+        app: events-service
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -z events-db 5432; do echo waiting for events db; sleep 2; done']
+      containers:
+        - name: events-service
+          image: meenu155/event-service:v2
+          ports:
+            - containerPort: 8002
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: PORT
+              value: "8002"
+            - name: DB_HOST
+              value: events-db.event-management.svc.cluster.local
+            - name: DB_USER
+              value: events
+            - name: DB_PASSWORD
+              value: eventspw
+            - name: DB_NAME
+              value: events
+            - name: SECRET_KEY
+              value: your-super-secret-jwt-key-change-in-production
+            - name: KAFKA_BROKERS
+              value: kafka.kafka.svc.cluster.local:9092
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

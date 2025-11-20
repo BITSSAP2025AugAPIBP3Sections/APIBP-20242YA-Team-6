@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: events-db
+  namespace: event-management
+  labels:
+    app: events-db
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: events-db
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: events-service
+  namespace: event-management
+  labels:
+    app: events-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP
+      name: http
+  selector:
+    app: events-service
