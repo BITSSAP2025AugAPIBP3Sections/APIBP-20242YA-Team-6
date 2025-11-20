@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendees-service
+  namespace: event-management
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attendees-service
+  template:
+    metadata:
+      labels:
+        app: attendees-service
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -z attendees-db 5432; do echo waiting for db; sleep 2; done']
+      containers:
+        - name: attendees-service
+          image: yadav3033/attendees-service:v1
+          ports:
+            - containerPort: 8005
+          env:
+            - name: ENVIRONMENT
+              value: development
+            - name: PORT
+              value: "8005"
+            - name: DB_HOST
+              value: attendees-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: attendees
+            - name: DB_USER
+              value: attendees
+            - name: DB_PASSWORD
+              value: attendeespw
+            - name: JWT_SECRET
+              value: your-super-secret-jwt-key-change-in-production
+            - name: KAFKA_BROKERS
+              value: kafka:9092
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
