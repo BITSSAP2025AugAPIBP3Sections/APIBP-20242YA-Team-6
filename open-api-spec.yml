@@ -179,6 +179,46 @@ components:
         vendorId:
           type: string
           nullable: true
+        organizerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TaskPaginationResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        pagination:
+          $ref: "#/components/schemas/PaginationInfo"
+
+    PaginationInfo:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        page_size:
+          type: integer
+        total_count:
+          type: integer
+        total_pages:
+          type: integer
+        has_next:
+          type: boolean
+        has_previous:
+          type: boolean
+        next_page:
+          type: integer
+          nullable: true
+        previous_page:
+          type: integer
+          nullable: true
 
     Notification:
       type: object
@@ -1354,22 +1394,130 @@ paths:
   /tasks:
     get:
       tags: [Tasks]
-      summary: List all tasks
+      summary: List all tasks with pagination, filtering, sorting, and field selection
       security:
         - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: sort_by
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [id, title, status, eventId, vendorId, organizerId, createdAt, updatedAt]
+            default: id
+        - name: sort_order
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: title
+          in: query
+          description: Filter by title (partial match, case-insensitive)
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [pending, in_progress, completed]
+        - name: event_id
+          in: query
+          description: Filter by event ID
+          schema:
+            type: integer
+        - name: vendor_id
+          in: query
+          description: Filter by vendor ID
+          schema:
+            type: integer
+        - name: organizer_id
+          in: query
+          description: Filter by organizer ID
+          schema:
+            type: integer
+        - name: search
+          in: query
+          description: Search in title and description (partial match, case-insensitive)
+          schema:
+            type: string
+        - name: fields
+          in: query
+          description: Comma-separated list of fields to return (e.g., "id,title,status")
+          schema:
+            type: string
+          example: "id,title,status,eventId"
       responses:
         "200":
-          description: List of tasks
+          description: Paginated list of tasks
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/TaskPaginationResponse"
+              examples:
+                fullResponse:
+                  summary: Full response with pagination
+                  value:
+                    data:
+                      - id: "1"
+                        title: "Setup venue"
+                        description: "Arrange chairs and tables"
+                        status: "pending"
+                        eventId: "123"
+                        vendorId: "456"
+                        organizerId: "789"
+                        createdAt: "2024-01-01T10:00:00Z"
+                        updatedAt: "2024-01-01T10:00:00Z"
+                    pagination:
+                      current_page: 1
+                      page_size: 10
+                      total_count: 25
+                      total_pages: 3
+                      has_next: true
+                      has_previous: false
+                      next_page: 2
+                      previous_page: null
+                selectedFields:
+                  summary: Response with field selection
+                  value:
+                    data:
+                      - id: "1"
+                        title: "Setup venue"
+                        status: "pending"
+                    pagination:
+                      current_page: 1
+                      page_size: 10
+                      total_count: 25
+                      total_pages: 3
+                      has_next: true
+                      has_previous: false
+                      next_page: 2
+                      previous_page: null
+        "400":
+          description: Bad request - Invalid query parameters
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
           description: Forbidden - Valid token but insufficient permissions
+        "422":
+          description: Validation error - Query parameters validation failed
         "500":
           description: Internal server error
  
