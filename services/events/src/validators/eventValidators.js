@@ -5,8 +5,8 @@ export const createEventValidation = [
   body('description').optional().trim(),
   body('location').notEmpty().trim(),
   body('startAt').isISO8601(),
-  body('endAt').isISO8601(),
-  body('organizerId').notEmpty()
+  body('endAt').isISO8601()
+  // organizerId is automatically set from authenticated user, not from request body
 ];
 
 export const updateEventValidation = [

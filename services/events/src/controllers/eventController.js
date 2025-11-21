@@ -184,7 +184,9 @@ export async function getAllEvents(req, res) {
 
 export async function createEvent(req, res) {
   try {
-    const { name, description, location, startAt, endAt, organizerId } = req.body;
+    const { name, description, location, startAt, endAt } = req.body;
+    // Use authenticated user as organizerId
+    const organizerId = req.user.sub;
     const result = await pool.query(
       'INSERT INTO events (name, description, location, start_at, end_at, organizer_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, description, location, start_at as "startAt", end_at as "endAt", organizer_id as "organizerId"',
       [name, description, location, startAt, endAt, organizerId]
@@ -241,6 +243,11 @@ export async function updateEvent(req, res) {
     }
     
     const currentEvent = checkResult.rows[0];
+    
+    // Organizers can only update their own events
+    if (req.user.role === 'organizer' && currentEvent.organizer_id !== req.user.sub) {
+      return res.status(403).json({ detail: 'You can only update your own events' });
+    }
     
     // Build update query
     const updates = [];
@@ -306,6 +313,21 @@ export async function updateEvent(req, res) {
 export async function deleteEvent(req, res) {
   try {
     const { id } = req.params;
+    
+    // Check event ownership for organizers
+    if (req.user.role === 'organizer') {
+      const checkResult = await pool.query(
+        'SELECT organizer_id FROM events WHERE id = $1',
+        [id]
+      );
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ detail: 'Event not found' });
+      }
+      if (checkResult.rows[0].organizer_id !== req.user.sub) {
+        return res.status(403).json({ detail: 'You can only delete your own events' });
+      }
+    }
+    
     const result = await pool.query('DELETE FROM events WHERE id = $1 RETURNING id', [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ detail: 'Event not found' });
