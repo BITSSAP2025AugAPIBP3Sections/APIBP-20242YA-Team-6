@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z events-db 5432; do echo waiting for events db; sleep 2; done']
       containers:
         - name: events-service
-          image: meenu155/event-service:v3
+          image: meenu155/event-service:v4
           ports:
             - containerPort: 8002
           env:
