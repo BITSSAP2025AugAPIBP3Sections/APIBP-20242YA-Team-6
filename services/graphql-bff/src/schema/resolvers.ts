@@ -40,6 +40,12 @@ export const resolvers = {
       if (!user) {
         throw new RBACError('Authentication required. Login with the "login" mutation and add the token to Headers: {"Authorization": "Bearer YOUR_TOKEN"}');
       }
+      
+      // Only organizers and admins can view vendors list
+      if (user.role !== 'organizer' && user.role !== 'admin') {
+        throw new RBACError('Only organizers and admins can view vendors');
+      }
+      
       const response = await dataSources.vendorsService.get('/v1/vendors', { page, page_size: limit });
       return {
         data: response.vendors || [],
@@ -63,8 +69,33 @@ export const resolvers = {
       if (!user) {
         throw new RBACError('Authentication required. Login with the "login" mutation and add the token to Headers: {"Authorization": "Bearer YOUR_TOKEN"}');
       }
+      
       const params: any = { page, page_size: limit };
-      if (eventId) params.eventId = eventId;
+      
+      // Vendors can only see their own tasks
+      if (user.role === 'vendor') {
+        params.vendorId = user.id;
+      }
+      
+      // Organizers can only see tasks for their events
+      if (user.role === 'organizer') {
+        if (eventId) {
+          const event = await dataSources.eventsService.get(`/v1/events/${eventId}`);
+          AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+          params.eventId = eventId;
+        } else {
+          // Get all tasks for organizer's events
+          const eventsResponse = await dataSources.eventsService.get('/v1/events', { organizerId: user.id, page_size: 1000 });
+          const eventIds = (eventsResponse.events || []).map((e: any) => e.id);
+          if (eventIds.length === 0) {
+            return { data: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+          }
+          params.eventIds = eventIds;
+        }
+      } else if (eventId) {
+        params.eventId = eventId;
+      }
+      
       const response = await dataSources.tasksService.get('/v1/tasks', params);
       return {
         data: response.tasks || [],
@@ -80,7 +111,21 @@ export const resolvers = {
       if (!user) {
         throw new RBACError('Authentication required. Login with the "login" mutation and add the token to Headers: {"Authorization": "Bearer YOUR_TOKEN"}');
       }
-      return dataSources.tasksService.get(`/v1/tasks/${id}`);
+      
+      const task = await dataSources.tasksService.get(`/v1/tasks/${id}`);
+      
+      // Vendors can only view tasks assigned to them
+      if (user.role === 'vendor' && task.vendorId !== user.id) {
+        throw new RBACError('You can only view tasks assigned to you');
+      }
+      
+      // Organizers can only view tasks for their events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${task.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
+      return task;
     },
 
     // Attendees
@@ -88,6 +133,18 @@ export const resolvers = {
       if (!user) {
         throw new RBACError('Authentication required. Login with the "login" mutation and add the token to Headers: {"Authorization": "Bearer YOUR_TOKEN"}');
       }
+      
+      // Only organizers (for their events) and admins can view attendees
+      if (user.role === 'organizer' && eventId) {
+        // Verify organizer owns the event
+        const event = await dataSources.eventsService.get(`/v1/events/${eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      } else if (user.role === 'organizer' && !eventId) {
+        throw new RBACError('Organizers must specify an eventId to view attendees');
+      } else if (user.role !== 'admin') {
+        throw new RBACError('Only organizers and admins can view attendees');
+      }
+      
       const params: any = { page, page_size: limit };
       if (eventId) params.eventId = eventId;
       const response = await dataSources.attendeesService.get('/v1/attendees', params);
@@ -203,14 +260,29 @@ export const resolvers = {
     // Events
     createEvent: async (_: any, args: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateEvent');
-      return dataSources.eventsService.post('/v1/events', args);
+      // Set the organizerId to the current user
+      return dataSources.eventsService.post('/v1/events', { ...args, organizerId: user.id });
     },
     updateEvent: async (_: any, { id, ...updates }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateEvent');
+      
+      // Organizers can only update their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${id}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       return dataSources.eventsService.patch(`/v1/events/${id}`, updates);
     },
     deleteEvent: async (_: any, { id }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canDeleteEvent');
+      
+      // Organizers can only delete their own events (though permission is false by default)
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${id}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       await dataSources.eventsService.delete(`/v1/events/${id}`);
       return true;
     },
@@ -218,12 +290,29 @@ export const resolvers = {
     // Vendors
     createVendor: async (_: any, args: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateVendor');
+      
+      // Organizers can only create vendors for their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${args.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       // Convert eventId to string as vendors service expects
       const vendorData = { ...args, eventId: String(args.eventId) };
       return dataSources.vendorsService.post('/v1/vendors', vendorData);
     },
     updateVendor: async (_: any, { id, ...updates }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateVendor');
+      
+      // Get the vendor to check event ownership
+      const vendor = await dataSources.vendorsService.get(`/v1/vendors/${id}`);
+      
+      // Organizers can only update vendors for their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${vendor.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       // Convert eventId to string if present
       if (updates.eventId !== undefined) {
         updates.eventId = String(updates.eventId);
@@ -232,6 +321,16 @@ export const resolvers = {
     },
     deleteVendor: async (_: any, { id }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canDeleteVendor');
+      
+      // Get the vendor to check event ownership
+      const vendor = await dataSources.vendorsService.get(`/v1/vendors/${id}`);
+      
+      // Organizers can only delete vendors for their own events (though permission is false by default)
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${vendor.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       await dataSources.vendorsService.delete(`/v1/vendors/${id}`);
       return true;
     },
@@ -239,14 +338,46 @@ export const resolvers = {
     // Tasks
     createTask: async (_: any, args: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateTask');
+      
+      // Organizers can only create tasks for their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${args.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       return dataSources.tasksService.post('/v1/tasks', args);
     },
     updateTask: async (_: any, { id, ...updates }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateTask');
+      
+      const task = await dataSources.tasksService.get(`/v1/tasks/${id}`);
+      
+      // Vendors can only update tasks assigned to them
+      if (user.role === 'vendor') {
+        if (task.vendorId !== user.id) {
+          throw new RBACError('You can only update tasks assigned to you');
+        }
+      }
+      
+      // Organizers can only update tasks for their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${task.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       return dataSources.tasksService.patch(`/v1/tasks/${id}`, updates);
     },
     deleteTask: async (_: any, { id }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canDeleteTask');
+      
+      const task = await dataSources.tasksService.get(`/v1/tasks/${id}`);
+      
+      // Organizers can only delete tasks for their own events (though permission is false by default)
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${task.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       await dataSources.tasksService.delete(`/v1/tasks/${id}`);
       return true;
     },
@@ -258,6 +389,21 @@ export const resolvers = {
     },
     updateRSVP: async (_: any, { id, status }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateRSVP');
+      
+      // Get the RSVP to check ownership
+      const rsvp = await dataSources.attendeesService.get(`/v1/attendees/${id}`);
+      
+      // Attendees can only update their own RSVPs
+      if (user.role === 'attendee' && rsvp.userId !== user.id) {
+        throw new RBACError('You can only update your own RSVPs');
+      }
+      
+      // Organizers can only update RSVPs for their own events
+      if (user.role === 'organizer') {
+        const event = await dataSources.eventsService.get(`/v1/events/${rsvp.eventId}`);
+        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
+      }
+      
       return dataSources.attendeesService.patch(`/v1/attendees/${id}/rsvp`, { status });
     },
 
