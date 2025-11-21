@@ -11,230 +11,6 @@ const QUICK_LOGIN = {
     attendee: { email: 'attendee@test.com', password: 'attendee123' }
 };
 
-// ===== API Helpers =====
-function getApiUrl() {
-    const input = document.getElementById('apiUrl');
-    return input ? input.value : apiBaseUrl;
-}
-
-async function apiCall(endpoint, method = 'GET', body = null) {
-    const url = `${getApiUrl()}${endpoint}`;
-    const options = {
-        method,
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    };
-
-    if (authToken) {
-        options.headers['Authorization'] = `Bearer ${authToken}`;
-    }
-
-    if (body) {
-        options.body = JSON.stringify(body);
-    }
-
-    console.log(`API ${method} ${url}`, body || '');
-
-    try {
-        const response = await fetch(url, options);
-        let data;
-
-        try {
-            data = await response.json();
-        } catch (e) {
-            data = { detail: 'Invalid response' };
-        }
-
-        console.log(`Response ${response.status}:`, data);
-
-        if (!response.ok) {
-            if (response.status === 403) {
-                throw new Error(`Access Denied: ${data.detail || 'Permission required'}`);
-            } else if (response.status === 401) {
-                throw new Error(`Authentication required: ${data.detail || 'Please login'}`);
-            } else if (response.status === 422) {
-                const errors = data.errors || data.detail || 'Validation error';
-                throw new Error(JSON.stringify(errors, null, 2));
-            } else {
-                throw new Error(data.detail || JSON.stringify(data) || `HTTP ${response.status}`);
-            }
-        }
-
-        return { success: true, data };
-    } catch (error) {
-        console.error('API Error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// ===== Toast Notifications =====
-function showToast(title, message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-
-    const icons = {
-        success: '✅',
-        error: '❌',
-        info: 'ℹ️',
-        warning: '⚠️'
-    };
-
-    toast.innerHTML = `
-        <div class="toast-icon">${icons[type]}</div>
-        <div class="toast-content">
-            <div class="toast-title">${title}</div>
-            <div class="toast-message">${message}</div>
-        </div>
-    `;
-
-    container.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
-}
-
-// ===== Authentication =====
-function showAuthMode(mode) {
-    const loginForm = document.getElementById('loginForm');
-    const registerForm = document.getElementById('registerForm');
-    const tabs = document.querySelectorAll('.tab-btn');
-
-    tabs.forEach(tab => tab.classList.remove('active'));
-
-    if (mode === 'login') {
-        loginForm.classList.remove('hidden');
-        registerForm.classList.add('hidden');
-        tabs[0].classList.add('active');
-    } else {
-        loginForm.classList.add('hidden');
-        registerForm.classList.remove('hidden');
-        tabs[1].classList.add('active');
-    }
-}
-
-async function register() {
-    const email = document.getElementById('regEmail').value.trim();
-    const password = document.getElementById('regPassword').value;
-    const role = document.getElementById('regRole').value;
-
-    if (!email || !password) {
-        showToast('Error', 'Please fill all fields', 'error');
-        return;
-    }
-
-    if (password.length < 6) {
-        showToast('Error', 'Password must be at least 6 characters', 'error');
-        return;
-    }
-
-    const result = await apiCall('/v1/auth/register', 'POST', { email, password, role });
-
-    if (result.success) {
-        showToast('Success', 'Account created! You can now login', 'success');
-        document.getElementById('regEmail').value = '';
-        document.getElementById('regPassword').value = '';
-        setTimeout(() => {
-            showAuthMode('login');
-            document.getElementById('loginEmail').value = email;
-            document.getElementById('loginPassword').value = password;
-        }, 1500);
-    } else {
-        showToast('Registration Failed', result.error, 'error');
-    }
-}
-
-async function login() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const password = document.getElementById('loginPassword').value;
-
-    if (!email || !password) {
-        showToast('Error', 'Please enter email and password', 'error');
-        return;
-    }
-
-    const result = await apiCall('/v1/auth/login', 'POST', { email, password });
-
-    if (result.success) {
-        authToken = result.data.token;
-        await fetchCurrentUser();
-    } else {
-        showToast('Login Failed', result.error, 'error');
-    }
-}
-
-async function quickLogin(role) {
-    const creds = QUICK_LOGIN[role];
-
-    // Try to register (if doesn't exist)
-    await apiCall('/v1/auth/register', 'POST', { ...creds, role });
-
-    // Login
-    const result = await apiCall('/v1/auth/login', 'POST', creds);
-
-    if (result.success) {
-        authToken = result.data.token;
-        await fetchCurrentUser();
-    } else {
-        showToast('Quick Login Failed', result.error, 'error');
-    }
-}
-
-async function fetchCurrentUser() {
-    const result = await apiCall('/v1/auth/me', 'GET');
-
-    if (result.success) {
-        currentUser = result.data;
-        // Auth service returns 'id' but JWT uses 'sub', normalize it
-        if (currentUser.id && !currentUser.sub) {
-            currentUser.sub = currentUser.id;
-        }
-        console.log('Current User:', currentUser);
-        showDashboard();
-    } else {
-        showToast('Error', 'Failed to fetch user info', 'error');
-    }
-}
-
-function logout() {
-    authToken = null;
-    currentUser = null;
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('dashboard').classList.add('hidden');
-    showToast('Logged Out', 'See you soon!', 'info');
-}
-
-// ===== Dashboard =====
-function showDashboard() {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('dashboard').classList.remove('hidden');
-
-    // Update nav
-    document.getElementById('navUserEmail').textContent = currentUser.email;
-    const roleBadge = document.getElementById('navUserRole');
-    roleBadge.textContent = currentUser.role.toUpperCase();
-    roleBadge.className = `user-role-badge ${currentUser.role}`;
-
-    // Show role-specific dashboard
-    const dashboards = ['adminDashboard', 'organizerDashboard', 'vendorDashboard', 'attendeeDashboard'];
-    dashboards.forEach(id => document.getElementById(id).classList.add('hidden'));
-
-    const roleDashboardMap = {
-        admin: 'adminDashboard',
-        organizer: 'organizerDashboard',
-        vendor: 'vendorDashboard',
-        attendee: 'attendeeDashboard'
-    };
-
-    const dashboardId = roleDashboardMap[currentUser.role];
-    if (dashboardId) {
-        document.getElementById(dashboardId).classList.remove('hidden');
-        loadRoleData(currentUser.role);
-    }
-}
 
 // ===== Role-Specific Data Loading =====
 async function loadRoleData(role) {
@@ -943,4 +719,229 @@ function openCreateTaskModal() {
         </div>
     `;
     document.body.appendChild(modal);
+}
+
+// ===== API Helpers =====
+function getApiUrl() {
+    const input = document.getElementById('apiUrl');
+    return input ? input.value : apiBaseUrl;
+}
+
+async function apiCall(endpoint, method = 'GET', body = null) {
+    const url = `${getApiUrl()}${endpoint}`;
+    const options = {
+        method,
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    };
+
+    if (authToken) {
+        options.headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
+
+    console.log(`API ${method} ${url}`, body || '');
+
+    try {
+        const response = await fetch(url, options);
+        let data;
+
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = { detail: 'Invalid response' };
+        }
+
+        console.log(`Response ${response.status}:`, data);
+
+        if (!response.ok) {
+            if (response.status === 403) {
+                throw new Error(`Access Denied: ${data.detail || 'Permission required'}`);
+            } else if (response.status === 401) {
+                throw new Error(`Authentication required: ${data.detail || 'Please login'}`);
+            } else if (response.status === 422) {
+                const errors = data.errors || data.detail || 'Validation error';
+                throw new Error(JSON.stringify(errors, null, 2));
+            } else {
+                throw new Error(data.detail || JSON.stringify(data) || `HTTP ${response.status}`);
+            }
+        }
+
+        return { success: true, data };
+    } catch (error) {
+        console.error('API Error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ===== Toast Notifications =====
+function showToast(title, message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: '✅',
+        error: '❌',
+        info: 'ℹ️',
+        warning: '⚠️'
+    };
+
+    toast.innerHTML = `
+        <div class="toast-icon">${icons[type]}</div>
+        <div class="toast-content">
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+// ===== Authentication =====
+function showAuthMode(mode) {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const tabs = document.querySelectorAll('.tab-btn');
+
+    tabs.forEach(tab => tab.classList.remove('active'));
+
+    if (mode === 'login') {
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+        tabs[0].classList.add('active');
+    } else {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        tabs[1].classList.add('active');
+    }
+}
+
+async function register() {
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const role = document.getElementById('regRole').value;
+
+    if (!email || !password) {
+        showToast('Error', 'Please fill all fields', 'error');
+        return;
+    }
+
+    if (password.length < 6) {
+        showToast('Error', 'Password must be at least 6 characters', 'error');
+        return;
+    }
+
+    const result = await apiCall('/v1/auth/register', 'POST', { email, password, role });
+
+    if (result.success) {
+        showToast('Success', 'Account created! You can now login', 'success');
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+        setTimeout(() => {
+            showAuthMode('login');
+            document.getElementById('loginEmail').value = email;
+            document.getElementById('loginPassword').value = password;
+        }, 1500);
+    } else {
+        showToast('Registration Failed', result.error, 'error');
+    }
+}
+
+async function login() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        showToast('Error', 'Please enter email and password', 'error');
+        return;
+    }
+
+    const result = await apiCall('/v1/auth/login', 'POST', { email, password });
+
+    if (result.success) {
+        authToken = result.data.token;
+        await fetchCurrentUser();
+    } else {
+        showToast('Login Failed', result.error, 'error');
+    }
+}
+
+async function quickLogin(role) {
+    const creds = QUICK_LOGIN[role];
+
+    // Try to register (if doesn't exist)
+    await apiCall('/v1/auth/register', 'POST', { ...creds, role });
+
+    // Login
+    const result = await apiCall('/v1/auth/login', 'POST', creds);
+
+    if (result.success) {
+        authToken = result.data.token;
+        await fetchCurrentUser();
+    } else {
+        showToast('Quick Login Failed', result.error, 'error');
+    }
+}
+
+async function fetchCurrentUser() {
+    const result = await apiCall('/v1/auth/me', 'GET');
+
+    if (result.success) {
+        currentUser = result.data;
+        // Auth service returns 'id' but JWT uses 'sub', normalize it
+        if (currentUser.id && !currentUser.sub) {
+            currentUser.sub = currentUser.id;
+        }
+        console.log('Current User:', currentUser);
+        showDashboard();
+    } else {
+        showToast('Error', 'Failed to fetch user info', 'error');
+    }
+}
+
+function logout() {
+    authToken = null;
+    currentUser = null;
+    document.getElementById('loginScreen').classList.remove('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+    showToast('Logged Out', 'See you soon!', 'info');
+}
+
+// ===== Dashboard =====
+function showDashboard() {
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+
+    // Update nav
+    document.getElementById('navUserEmail').textContent = currentUser.email;
+    const roleBadge = document.getElementById('navUserRole');
+    roleBadge.textContent = currentUser.role.toUpperCase();
+    roleBadge.className = `user-role-badge ${currentUser.role}`;
+
+    // Show role-specific dashboard
+    const dashboards = ['adminDashboard', 'organizerDashboard', 'vendorDashboard', 'attendeeDashboard'];
+    dashboards.forEach(id => document.getElementById(id).classList.add('hidden'));
+
+    const roleDashboardMap = {
+        admin: 'adminDashboard',
+        organizer: 'organizerDashboard',
+        vendor: 'vendorDashboard',
+        attendee: 'attendeeDashboard'
+    };
+
+    const dashboardId = roleDashboardMap[currentUser.role];
+    if (dashboardId) {
+        document.getElementById(dashboardId).classList.remove('hidden');
+        loadRoleData(currentUser.role);
+    }
 }
