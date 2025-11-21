@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kong-gateway
+  namespace: kong
+spec:
+  ingressClassName: istio
+  rules:
+    - host: event-management-api.c-282f7f4.kyma.ondemand.com  # Your Kong API gateway domain
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: kong-kong-proxy  # Verify actual service name
+              port:
+                number: 8000
+    - host: kong-admin.c-282f7f4.kyma.ondemand.com  # Your Kong Admin API domain
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: kong-kong-admin  # Verify actual service name
+              port:
+                number: 8001
+    - host: kong-manager.c-282f7f4.kyma.ondemand.com  # Your Kong Manager domain
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: kong-kong-manager  # Verify actual service name
+              port:
+                number: 8002
+  tls:
+    - hosts:
+      - event-management-api.c-282f7f4.kyma.ondemand.com
+      - kong-admin.c-282f7f4.kyma.ondemand.com
+      - kong-manager.c-282f7f4.kyma.ondemand.com
+      secretName: kyma-gateway-certs
