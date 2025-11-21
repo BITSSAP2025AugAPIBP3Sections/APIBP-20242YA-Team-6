@@ -67,24 +67,24 @@ export const ROLE_PERMISSIONS: Record<UserRole, RBACPermissions> = {
     // Events
     canCreateEvent: true,
     canUpdateEvent: true,
-    canDeleteEvent: false, // Only own events
+    canDeleteEvent: true, // Can delete own events
     canViewAllEvents: true,
 
     // Vendors
     canCreateVendor: true,
     canUpdateVendor: true,
-    canDeleteVendor: false,
+    canDeleteVendor: true, // Can delete vendors for own events
 
     // Tasks
     canCreateTask: true,
     canUpdateTask: true,
-    canDeleteTask: false,
-    canViewAllTasks: true,
+    canDeleteTask: true, // Can delete tasks for own events
+    canViewAllTasks: false, // Only see tasks for own events
 
     // Attendees
     canCreateRSVP: true,
     canUpdateRSVP: true,
-    canViewAllAttendees: true,
+    canViewAllAttendees: false, // Only see attendees for own events
 
     // Notifications
     canCreateNotification: true,
@@ -110,8 +110,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RBACPermissions> = {
     canViewAllTasks: false, // Only own tasks
 
     // Attendees
-    canCreateRSVP: true,
-    canUpdateRSVP: true,
+    canCreateRSVP: false,
+    canUpdateRSVP: false,
     canViewAllAttendees: false,
 
     // Notifications
@@ -197,5 +197,83 @@ export class AuthorizationService {
 
     // Users can access their own resources
     return userId === resourceOwnerId;
+  }
+
+  // Check if user can access/modify an event (for organizers: own events only)
+  static canAccessEvent(
+    userRole: string | undefined,
+    userId: number | undefined,
+    eventOrganizerId: number
+  ): boolean {
+    if (!userRole || !userId) return false;
+
+    // Admins can access all events
+    if (userRole === UserRole.ADMIN) return true;
+
+    // Organizers can only access their own events
+    if (userRole === UserRole.ORGANIZER) {
+      return userId === eventOrganizerId;
+    }
+
+    return false;
+  }
+
+  // Check if user can access/modify a task (vendors: only their own tasks)
+  static canAccessTask(
+    userRole: string | undefined,
+    userId: number | undefined,
+    taskVendorId: number | null
+  ): boolean {
+    if (!userRole || !userId) return false;
+
+    // Admins can access all tasks
+    if (userRole === UserRole.ADMIN) return true;
+
+    // Vendors can only access tasks assigned to them
+    if (userRole === UserRole.VENDOR && taskVendorId) {
+      return userId === taskVendorId;
+    }
+
+    return false;
+  }
+
+  // Check if user can access/modify an RSVP (attendees: only their own RSVPs)
+  static canAccessRSVP(
+    userRole: string | undefined,
+    userId: number | undefined,
+    rsvpUserId: number
+  ): boolean {
+    if (!userRole || !userId) return false;
+
+    // Admins can access all RSVPs
+    if (userRole === UserRole.ADMIN) return true;
+
+    // Attendees can only access their own RSVPs
+    if (userRole === UserRole.ATTENDEE) {
+      return userId === rsvpUserId;
+    }
+
+    return false;
+  }
+
+  // Check if organizer owns the event
+  static requireEventOwnership(
+    userRole: string | undefined,
+    userId: number | undefined,
+    eventOrganizerId: number
+  ): void {
+    if (!userRole || !userId) {
+      throw new RBACError('Not authenticated');
+    }
+
+    if (userRole === UserRole.ADMIN) {
+      return; // Admins have full access
+    }
+
+    if (userRole === UserRole.ORGANIZER && userId === eventOrganizerId) {
+      return; // Organizer owns this event
+    }
+
+    throw new RBACError('You can only manage your own events');
   }
 }
