@@ -162,6 +162,9 @@ async def list_vendors(
     user=Depends(verify_token),
     db: Session = Depends(get_db)
 ):
+    # Only organizers and admins can view vendors
+    if user.get("role") not in ["admin", "organizer"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizers and admins can view vendors")
     """
     List vendors with advanced filtering, sorting, pagination, and field selection.
     
@@ -243,6 +246,23 @@ async def list_vendors(
 
 @app.post("/v1/vendors", response_model=VendorResponse, status_code=status.HTTP_201_CREATED)
 async def create_vendor(vendor_data: VendorCreate, user=Depends(require_role("admin", "organizer")), db: Session = Depends(get_db)):
+    # Organizers can only create vendors for their own events
+    if user.get("role") == "organizer":
+        import httpx
+        async with httpx.AsyncClient() as client:
+            try:
+                event_response = await client.get(
+                    f"http://events-service:8002/v1/events/{vendor_data.eventId}",
+                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
+                )
+                event_data = event_response.json()
+                if event_data.get("organizerId") != user.get("sub"):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only create vendors for your own events")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+                raise
+    
     existing = db.query(DBVendor).filter(DBVendor.email == vendor_data.email).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Vendor already exists with same email")
@@ -289,6 +309,24 @@ async def update_vendor(id: int, vendor_data: VendorUpdate, user=Depends(require
     vendor = db.query(DBVendor).filter(DBVendor.id == id).first()
     if not vendor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
+    
+    # Organizers can only update vendors for their own events
+    if user.get("role") == "organizer":
+        import httpx
+        async with httpx.AsyncClient() as client:
+            try:
+                event_response = await client.get(
+                    f"http://events-service:8002/v1/events/{vendor.event_id}",
+                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
+                )
+                event_data = event_response.json()
+                if event_data.get("organizerId") != user.get("sub"):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update vendors for your own events")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+                raise
+    
     if vendor_data.name: vendor.name = vendor_data.name
     if vendor_data.email:
         existing = db.query(DBVendor).filter(DBVendor.email == vendor_data.email, DBVendor.id != id).first()
@@ -306,6 +344,24 @@ async def delete_vendor(id: int, user=Depends(require_role("admin", "organizer")
     vendor = db.query(DBVendor).filter(DBVendor.id == id).first()
     if not vendor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
+    
+    # Organizers can only delete vendors for their own events
+    if user.get("role") == "organizer":
+        import httpx
+        async with httpx.AsyncClient() as client:
+            try:
+                event_response = await client.get(
+                    f"http://events-service:8002/v1/events/{vendor.event_id}",
+                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
+                )
+                event_data = event_response.json()
+                if event_data.get("organizerId") != user.get("sub"):
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete vendors for your own events")
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+                raise
+    
     db.delete(vendor)
     db.commit()
 
