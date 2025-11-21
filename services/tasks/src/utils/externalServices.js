@@ -93,3 +93,59 @@ export async function getVendorUserId(vendorEmail) {
     }
     return null;
 }
+
+// Get userId from vendorId (vendorId -> vendor email -> userId)
+export async function getUserIdFromVendorId(vendorId) {
+    try {
+        const vendorEmail = await getVendorEmail(vendorId);
+        if (vendorEmail) {
+            return await getVendorUserId(vendorEmail);
+        }
+    } catch (error) {
+        console.error(`⚠️  Failed to get userId from vendorId ${vendorId}:`, error);
+    }
+    return null;
+}
+
+// Get vendorId from userId (search vendors by user's email)
+export async function getVendorIdFromUserId(userId) {
+    try {
+        // First get user email from auth service
+        const userEmail = await getUserEmail(userId);
+        if (!userEmail) {
+            return null;
+        }
+
+        // Generate service token for vendors service call
+        const serviceToken = jwt.sign(
+            {
+                sub: 'tasks-service',
+                email: 'service@internal.com',
+                role: 'admin',
+                exp: Math.floor(Date.now() / 1000) + 3600
+            },
+            SECRET_KEY
+        );
+
+        // Search for vendor by email
+        const response = await fetch(`http://vendors-service:8003/v1/vendors?email=${encodeURIComponent(userEmail)}`, {
+            headers: { 'Authorization': `Bearer ${serviceToken}` }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data.vendors && data.vendors.length > 0) {
+                const vendorId = parseInt(data.vendors[0].id);
+                console.log(`✅ Found vendor ID: ${vendorId} for user ${userId}`);
+                return vendorId;
+            } else {
+                console.log(`⚠️  No vendor found for user ${userId} with email ${userEmail}`);
+            }
+        } else {
+            console.error(`❌ Failed to search vendors: ${response.status} ${response.statusText}`);
+        }
+    } catch (error) {
+        console.error(`⚠️  Failed to get vendorId from userId ${userId}:`, error);
+    }
+    return null;
+}
