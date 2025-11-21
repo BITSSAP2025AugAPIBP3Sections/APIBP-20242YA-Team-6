@@ -1,0 +1,666 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-declarative-config
+  namespace: kong
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    plugins:
+      - config:
+          echo_downstream: true
+          generator: uuid
+          header_name: X-Request-ID
+        enabled: true
+        name: correlation-id
+        protocols:
+          - grpc
+          - grpcs
+          - http
+          - https
+      - config:
+          credentials: true
+          exposed_headers:
+            - X-Auth-Token
+            - X-Kong-Request-Id
+            - X-RateLimit-Remaining-Minute
+          headers:
+            - Accept
+            - Accept-Version
+            - Content-Length
+            - Content-MD5
+            - Content-Type
+            - Date
+            - Authorization
+            - X-Auth-Token
+          max_age: 3600
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+            - HEAD
+          origins:
+            - http://localhost:3000
+            - http://localhost:8000
+            - http://127.0.0.1:3000
+          preflight_continue: false
+          private_network: false
+        enabled: true
+        name: cors
+        protocols:
+          - grpc
+          - grpcs
+          - http
+          - https
+      - config:
+          allowed_payload_size: 10
+          require_content_length: false
+          size_unit: megabytes
+        enabled: true
+        name: request-size-limiting
+        protocols:
+          - grpc
+          - grpcs
+          - http
+          - https
+    services:
+      - connect_timeout: 60000
+        enabled: true
+        host: attendees-service.event-management.svc.cluster.local
+        name: attendees-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 5000
+              limit_by: consumer
+              minute: 100
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8005
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - POST
+              - OPTIONS
+            name: attendees-by-event
+            path_handling: v0
+            paths:
+              - ~/v1/events/\d+/attendees
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 100
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: attendees-detail
+            path_handling: v0
+            paths:
+              - ~/v1/attendees/\d+
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: attendees-list
+            path_handling: v0
+            paths:
+              - /v1/attendees
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
+      - connect_timeout: 60000
+        enabled: true
+        host: auth-service.event-management.svc.cluster.local
+        name: auth-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 1000
+              limit_by: consumer
+              minute: 50
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8001
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: auth-login
+            path_handling: v0
+            paths:
+              - /v1/auth/login
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: auth-me
+            path_handling: v0
+            paths:
+              - /v1/auth/me
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: auth-register
+            path_handling: v0
+            paths:
+              - /v1/auth/register
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
+      - connect_timeout: 60000
+        enabled: true
+        host: events-service.event-management.svc.cluster.local
+        name: events-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 5000
+              limit_by: consumer
+              minute: 100
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8002
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: events-create
+            path_handling: v0
+            paths:
+              - /v1/events
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - PATCH
+              - DELETE
+              - OPTIONS
+            name: events-detail
+            path_handling: v0
+            paths:
+              - ~/v1/events/\d+
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: events-list
+            path_handling: v0
+            paths:
+              - /v1/events
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
+      - connect_timeout: 60000
+        enabled: true
+        host: notifications-service.event-management.svc.cluster.local
+        name: notifications-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 3000
+              limit_by: consumer
+              minute: 80
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8006
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: notifications-create
+            path_handling: v0
+            paths:
+              - /v1/notifications
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: notifications-list
+            path_handling: v0
+            paths:
+              - /v1/notifications
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
+      - connect_timeout: 60000
+        enabled: true
+        host: tasks-service.event-management.svc.cluster.local
+        name: tasks-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 5000
+              limit_by: consumer
+              minute: 100
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8004
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: tasks-create
+            path_handling: v0
+            paths:
+              - /v1/tasks
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - PATCH
+              - DELETE
+              - OPTIONS
+            name: tasks-detail
+            path_handling: v0
+            paths:
+              - ~/v1/tasks/\d+
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: tasks-list
+            path_handling: v0
+            paths:
+              - /v1/tasks
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
+      - connect_timeout: 60000
+        enabled: true
+        host: vendors-service.event-management.svc.cluster.local
+        name: vendors-service
+        plugins:
+          - config:
+              day: null
+              error_code: 429
+              error_message: API rate limit exceeded
+              fault_tolerant: true
+              header_name: null
+              hide_client_headers: false
+              hour: 5000
+              limit_by: consumer
+              minute: 100
+              month: null
+              path: null
+              policy: local
+              redis:
+                database: 0
+                host: null
+                password: null
+                port: 6379
+                server_name: null
+                ssl: false
+                ssl_verify: false
+                timeout: 2000
+                username: null
+              redis_database: 0
+              redis_host: null
+              redis_password: null
+              redis_port: 6379
+              redis_server_name: null
+              redis_ssl: false
+              redis_ssl_verify: false
+              redis_timeout: 2000
+              redis_username: null
+              second: null
+              sync_rate: -1
+              year: null
+            enabled: true
+            name: rate-limiting
+            protocols:
+              - grpc
+              - grpcs
+              - http
+              - https
+        port: 8003
+        protocol: http
+        read_timeout: 60000
+        retries: 5
+        routes:
+          - https_redirect_status_code: 426
+            methods:
+              - POST
+              - OPTIONS
+            name: vendors-create
+            path_handling: v0
+            paths:
+              - /v1/vendors
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - PATCH
+              - DELETE
+              - OPTIONS
+            name: vendors-detail
+            path_handling: v0
+            paths:
+              - ~/v1/vendors/\d+
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: vendors-list
+            path_handling: v0
+            paths:
+              - /v1/vendors
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 0
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+        write_timeout: 60000
