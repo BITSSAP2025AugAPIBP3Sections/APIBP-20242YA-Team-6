@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-bff-config
+  namespace: event-management
+data:
+  AUTH_SERVICE_URL: "http://auth-service:8001"
+  EVENTS_SERVICE_URL: "http://events-service:8002"
+  VENDORS_SERVICE_URL: "http://vendors-service:8003"
+  TASKS_SERVICE_URL: "http://tasks-service:8004"
+  ATTENDEES_SERVICE_URL: "http://attendees-service:8005"
+  NOTIFICATIONS_SERVICE_URL: "http://notifications-service:8006"
+  PORT: "4000"
+  NODE_ENV: "development"
+  CORS_ORIGIN: "*"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: graphql-bff-secret
+  namespace: event-management
+type: Opaque
+stringData:
+  JWT_SECRET: "your-super-secret-jwt-key-change-in-production"  # Change this to match your auth service secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-bff
+  namespace: event-management
+  labels:
+    app: graphql-bff
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: graphql-bff
+  template:
+    metadata:
+      labels:
+        app: graphql-bff
+        version: v1
+    spec:
+      containers:
+      - name: graphql-bff
+        image: kaifcoder/graphql-bff:v1  
+        ports:
+        - containerPort: 4000
+          name: graphql
+          protocol: TCP
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: PORT
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: NODE_ENV
+        - name: AUTH_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: AUTH_SERVICE_URL
+        - name: EVENTS_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: EVENTS_SERVICE_URL
+        - name: VENDORS_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: VENDORS_SERVICE_URL
+        - name: TASKS_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: TASKS_SERVICE_URL
+        - name: ATTENDEES_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: ATTENDEES_SERVICE_URL
+        - name: NOTIFICATIONS_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: NOTIFICATIONS_SERVICE_URL
+        - name: CORS_ORIGIN
+          valueFrom:
+            configMapKeyRef:
+              name: graphql-bff-config
+              key: CORS_ORIGIN
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: graphql-bff-secret
+              key: JWT_SECRET
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /.well-known/apollo/server-health
+            port: 4000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /.well-known/apollo/server-health
+            port: 4000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-bff-service
+  namespace: event-management
+  labels:
+    app: graphql-bff
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4000
+    targetPort: 4000
+    protocol: TCP
+    name: graphql
+  selector:
+    app: graphql-bff
