@@ -105,6 +105,8 @@ services:
         condition: service_started
       notifications-service:
         condition: service_started
+      graphql-bff:
+        condition: service_started
     ports:
       - "8000:8000"  # Proxy HTTP
       - "8443:8443"  # Proxy HTTPS
@@ -304,6 +306,40 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+
+  graphql-bff:
+    build:
+      context: ./services/graphql-bff
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - EVENTS_SERVICE_URL=http://events-service:8002
+      - VENDORS_SERVICE_URL=http://vendors-service:8003
+      - TASKS_SERVICE_URL=http://tasks-service:8004
+      - ATTENDEES_SERVICE_URL=http://attendees-service:8005
+      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8006
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - CORS_ORIGIN=*
+    ports:
+      - "4000:4000"
+    depends_on:
+      - auth-service
+      - events-service
+      - vendors-service
+      - tasks-service
+      - attendees-service
+      - notifications-service
+    networks:
+      - event-management-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/.well-known/apollo/server-health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   kong_db_data:
