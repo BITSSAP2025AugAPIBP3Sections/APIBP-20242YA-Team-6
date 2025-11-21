@@ -379,7 +379,6 @@ CMD ["python", "src/main.py"]
 | Persistence layer | ✅ SQLAlchemy + PostgreSQL |
 | Readiness probe | ✅ K8s health checks |
 | API schema | ✅ OpenAPI/Swagger |
-| Event bus integration | 🔄 Planned |
 | Observability | ✅ FastAPI metrics |
 | **Advanced Features** | |
 | Pagination | ✅ Page-based pagination |
@@ -392,21 +391,21 @@ CMD ["python", "src/main.py"]
 
 The vendors service integrates with:
 - **Auth Service**: JWT validation and user roles
-- **Events Service**: Vendor-event associations
+- **Events Service**: Vendor-event associations via eventId field
 - **Kong Gateway**: API routing and rate limiting
-- **Kafka**: Event notifications (planned)
+- **PostgreSQL Database**: Data persistence and queries
 
-### Event-Driven Architecture (Planned)
+### Current Architecture
+The vendors service operates as a **synchronous REST API**:
+
 ```python
-# Kafka message publishing
-async def publish_vendor_event(event_type: str, vendor_data: dict):
-    message = {
-        "event_type": event_type,  # vendor.created, vendor.updated, vendor.deleted
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "vendors",
-        "data": vendor_data
-    }
-    await kafka_producer.send("vendor.events", message)
+# Direct database operations
+@app.post("/v1/vendors")
+async def create_vendor(vendor_data: VendorCreate, db: Session = Depends(get_db)):
+    # 1. Validate input data
+    # 2. Check for duplicate email
+    # 3. Create vendor in database
+    # 4. Return vendor response
 ```
 
 ## API Usage Examples
