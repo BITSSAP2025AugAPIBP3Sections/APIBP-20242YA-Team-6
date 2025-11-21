@@ -43,8 +43,8 @@ spec:
               value: kafka.kafka.svc.cluster.local:9092
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
               memory: "256Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
               cpu: "200m"
