@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z vendors-db 5432; do echo waiting for vendors db; sleep 2; done']
       containers:
         - name: vendors-service
-          image: shipra1907/vendors-service:v1.1
+          image: shipra1907/vendors-service:v2
           ports:
             - containerPort: 8003
           env:
