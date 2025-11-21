@@ -1,0 +1,54 @@
+# kong-values.yaml
+ingressController:
+  enabled: false
+
+proxy:
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 8000
+
+admin:
+  enabled: true
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 8001
+  https:
+    enabled: true
+    servicePort: 8444
+
+# Enable Kong Manager
+manager:
+  enabled: true
+  type: ClusterIP
+  http:
+    enabled: true
+    servicePort: 8002
+
+# Environment variables
+env:
+  database: "off"  # DB-less mode
+  # IMPORTANT: Tell Manager to use HTTP (not HTTPS) for Admin API
+  admin_api_uri: http://kong-kong-admin.kong.svc.cluster.local:8001
+  
+  # Manager URL (what users access in browser)
+  admin_gui_url: https://kong-manager.c-282f7f4.kyma.ondemand.com
+  
+  # Admin API URL (what Manager uses in browser to fetch data)
+  # This should point to your EXTERNAL Admin API URL via Istio
+  admin_gui_api_url: https://kong-admin.c-282f7f4.kyma.ondemand.com
+  
+  # Listeners
+  admin_listen: 0.0.0.0:8001  # HTTP only
+  admin_gui_listen: 0.0.0.0:8002
+  
+  # Disable SSL for admin (since you're using HTTP)
+  admin_ssl_enabled: false
+  kong_password: "handyshake"
+
+postgresql:
+  enabled: false
+
+dblessConfig:
+  configMap: kong-declarative-config
