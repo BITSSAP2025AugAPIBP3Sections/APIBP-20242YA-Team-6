@@ -210,6 +210,110 @@ components:
         rsvpAt:
           type: string
           format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateRsvp:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [going, interested, not_going]
+          description: RSVP status for the event
+    
+    UpdateRsvp:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [going, interested, not_going]
+          description: Updated RSVP status for the event
+    
+    PaginatedAttendeeResponse:
+      type: object
+      properties:
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attendee"
+        pagination:
+          type: object
+          properties:
+            current_page:
+              type: integer
+            page_size:
+              type: integer
+            total_count:
+              type: integer
+            total_pages:
+              type: integer
+            has_next:
+              type: boolean
+            has_previous:
+              type: boolean
+            next_page:
+              type: integer
+              nullable: true
+            previous_page:
+              type: integer
+              nullable: true
+        filters:
+          type: object
+          nullable: true
+        sorting:
+          type: object
+          properties:
+            sort_by:
+              type: string
+            sort_order:
+              type: string
+    
+    EventAttendeeResponse:
+      type: object
+      properties:
+        event_id:
+          type: string
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attendee"
+        pagination:
+          type: object
+          properties:
+            current_page:
+              type: integer
+            page_size:
+              type: integer
+            total_count:
+              type: integer
+            total_pages:
+              type: integer
+            has_next:
+              type: boolean
+            has_previous:
+              type: boolean
+            next_page:
+              type: integer
+              nullable: true
+            previous_page:
+              type: integer
+              nullable: true
+        filters:
+          type: object
+          nullable: true
+        sorting:
+          type: object
+          properties:
+            sort_by:
+              type: string
+            sort_order:
+              type: string
 
 paths:
 
@@ -611,18 +715,104 @@ paths:
   /attendees:
     get:
       tags: [Attendees]
-      summary: Get all attendees
+      summary: Get user's own RSVPs with advanced filtering, sorting, pagination, and field selection
+      description: |
+        Retrieve a paginated list of the current user's RSVPs with support for:
+        - **Pagination**: Use `page` and `page_size` parameters
+        - **Sorting**: Use `sort_by` and `sort_order` parameters  
+        - **Filtering**: Filter by eventId or status
+        - **Field Selection**: Use `fields` parameter to specify which fields to return
       security:
         - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (starts from 1)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of attendees per page (max 100)
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [id, eventId, status, rsvpAt, createdAt, updatedAt]
+            default: id
+          description: Field to sort by
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order (ascending or descending)
+        - name: fields
+          in: query
+          schema:
+            type: string
+          description: Comma-separated list of fields to return (e.g., "id,eventId,status")
+          example: "id,eventId,status,rsvpAt"
+        - name: eventId
+          in: query
+          schema:
+            type: string
+          description: Filter by event ID (exact match)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [invited, going, interested, not_going]
+          description: Filter by RSVP status
       responses:
         "200":
-          description: List of attendees
+          description: Paginated list of user's RSVPs
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Attendee"
+                $ref: "#/components/schemas/PaginatedAttendeeResponse"
+              examples:
+                userRsvps:
+                  summary: Example user RSVPs response
+                  value:
+                    attendees:
+                      - id: "1"
+                        userId: "user123"
+                        eventId: "event456"
+                        status: "going"
+                        rsvpAt: "2025-11-20T10:30:00Z"
+                        createdAt: "2025-11-20T10:30:00Z"
+                        updatedAt: "2025-11-20T10:30:00Z"
+                      - id: "2"
+                        userId: "user123"
+                        eventId: "event789"
+                        status: "interested"
+                        rsvpAt: "2025-11-19T15:45:00Z"
+                        createdAt: "2025-11-19T15:45:00Z"
+                        updatedAt: "2025-11-19T15:45:00Z"
+                    pagination:
+                      current_page: 1
+                      page_size: 10
+                      total_count: 2
+                      total_pages: 1
+                      has_next: false
+                      has_previous: false
+                      next_page: null
+                      previous_page: null
+                    filters:
+                      status: "going"
+                    sorting:
+                      sort_by: "rsvpAt"
+                      sort_order: "desc"
+        "400":
+          description: Bad request - Invalid query parameters or field selection
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
@@ -633,7 +823,7 @@ paths:
   /attendees/{id}:
     get:
       tags: [Attendees]
-      summary: Get attendee by ID
+      summary: Get attendee by ID with optional field selection
       security:
         - bearerAuth: []
       parameters:
@@ -642,6 +832,13 @@ paths:
           required: true
           schema:
             type: string
+          description: Attendee ID
+        - name: fields
+          in: query
+          schema:
+            type: string
+          description: Comma-separated list of fields to return (e.g., "id,eventId,status")
+          example: "id,eventId,status,rsvpAt"
       responses:
         "200":
           description: Attendee found
@@ -649,6 +846,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Attendee"
+        "400":
+          description: Bad request - Invalid field selection
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
@@ -661,7 +860,13 @@ paths:
   /events/{eventId}/attendees:
     get:
       tags: [Attendees]
-      summary: List attendees for a specific event
+      summary: List attendees for a specific event with advanced filtering, sorting, pagination, and field selection
+      description: |
+        Retrieve a paginated list of attendees for a specific event with support for:
+        - **Pagination**: Use `page` and `page_size` parameters
+        - **Sorting**: Use `sort_by` and `sort_order` parameters
+        - **Filtering**: Filter by userId or status
+        - **Field Selection**: Use `fields` parameter to specify which fields to return
       security:
         - bearerAuth: []
       parameters:
@@ -670,27 +875,111 @@ paths:
           required: true
           schema:
             type: string
+          description: Event ID to get attendees for
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (starts from 1)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Number of attendees per page (max 100)
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [id, userId, status, rsvpAt, createdAt, updatedAt]
+            default: id
+          description: Field to sort by
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order (ascending or descending)
+        - name: fields
+          in: query
+          schema:
+            type: string
+          description: Comma-separated list of fields to return (e.g., "id,userId,status")
+          example: "id,userId,status,rsvpAt"
+        - name: userId
+          in: query
+          schema:
+            type: string
+          description: Filter by user ID (exact match)
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [invited, going, interested, not_going]
+          description: Filter by RSVP status
       responses:
         "200":
-          description: List of event attendees
+          description: Paginated list of event attendees
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Attendee"
+                $ref: "#/components/schemas/EventAttendeeResponse"
+              examples:
+                eventAttendees:
+                  summary: Example event attendees response
+                  value:
+                    event_id: "event456"
+                    attendees:
+                      - id: "1"
+                        userId: "user123"
+                        eventId: "event456"
+                        status: "going"
+                        rsvpAt: "2025-11-20T10:30:00Z"
+                        createdAt: "2025-11-20T10:30:00Z"
+                        updatedAt: "2025-11-20T10:30:00Z"
+                      - id: "2"
+                        userId: "user456"
+                        eventId: "event456"
+                        status: "interested"
+                        rsvpAt: "2025-11-19T15:45:00Z"
+                        createdAt: "2025-11-19T15:45:00Z"
+                        updatedAt: "2025-11-19T15:45:00Z"
+                    pagination:
+                      current_page: 1
+                      page_size: 10
+                      total_count: 15
+                      total_pages: 2
+                      has_next: true
+                      has_previous: false
+                      next_page: 2
+                      previous_page: null
+                    filters:
+                      status: "going"
+                    sorting:
+                      sort_by: "rsvpAt"
+                      sort_order: "desc"
+        "400":
+          description: Bad request - Invalid query parameters or field selection
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
           description: Forbidden - Valid token but insufficient permissions
         "404":
           description: Event not found - Invalid event ID
+        "422":
+          description: Validation error - Invalid parameter values
         "500":
           description: Internal server error
  
     post:
       tags: [Attendees]
-      summary: RSVP for an event
+      summary: Create RSVP for an event
+      description: Create a new RSVP (attendance record) for the authenticated user and the specified event
       security:
         - bearerAuth: []
       parameters:
@@ -699,20 +988,75 @@ paths:
           required: true
           schema:
             type: string
+          description: Event ID to RSVP for
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  type: string
-                  enum: [going, interested, not_going]
+              $ref: "#/components/schemas/CreateRsvp"
+            examples:
+              goingRsvp:
+                summary: RSVP as going to event
+                value:
+                  status: "going"
+              interestedRsvp:
+                summary: RSVP as interested in event
+                value:
+                  status: "interested"
       responses:
         "201":
-          description: RSVP created
+          description: RSVP created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendee"
+        "400":
+          description: Bad request - Invalid RSVP status, invalid event ID, or missing required fields
+        "401":
+          description: Unauthorized - JWT token missing or invalid
+        "403":
+          description: Forbidden - Valid token but insufficient permissions
+        "404":
+          description: Event not found - Invalid event ID
+        "409":
+          description: Conflict - RSVP already exists for this user and event
+        "422":
+          description: Validation error - Request body validation failed
+        "500":
+          description: Internal server error
+
+    put:
+      tags: [Attendees]
+      summary: Update RSVP for an event
+      description: Update an existing RSVP status for the authenticated user and the specified event
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Event ID to update RSVP for
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRsvp"
+            examples:
+              updateToGoing:
+                summary: Update RSVP status to going
+                value:
+                  status: "going"
+              updateToNotGoing:
+                summary: Update RSVP status to not going
+                value:
+                  status: "not_going"
+      responses:
+        "200":
+          description: RSVP updated successfully
           content:
             application/json:
               schema:
@@ -724,9 +1068,7 @@ paths:
         "403":
           description: Forbidden - Valid token but insufficient permissions
         "404":
-          description: Event not found - Invalid event ID
-        "409":
-          description: Conflict - RSVP already exists for this user and event
+          description: RSVP not found - No existing RSVP found for this user and event
         "422":
           description: Validation error - Request body validation failed
         "500":
