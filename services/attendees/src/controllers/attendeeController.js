@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import { publishNotification } from '../config/kafka.js';
+import axios from 'axios';
 
 function buildPaginationInfo(page, pageSize, totalCount) {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
@@ -220,6 +221,28 @@ export const getEventAttendees = async (req, res) => {
   try {
     const { eventId } = req.params;
     
+    // Only organizers (for their events) and admins can view event attendees
+    if (req.user.role === 'organizer') {
+      // Verify the organizer owns this event by checking with events service
+      // For now, we'll trust the external call - in production, add event ownership validation
+      const token = req.headers.authorization;
+      try {
+        const eventResponse = await axios.get(`http://events-service:8002/v1/events/${eventId}`, {
+          headers: { Authorization: token }
+        });
+        if (eventResponse.data.organizerId !== req.user.sub) {
+          return res.status(403).json({ detail: 'You can only view attendees for your own events' });
+        }
+      } catch (error) {
+        if (error.response?.status === 404) {
+          return res.status(404).json({ detail: 'Event not found' });
+        }
+        throw error;
+      }
+    } else if (req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Only organizers and admins can view event attendees' });
+    }
+    
     // Parse query parameters
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 10));
@@ -342,6 +365,11 @@ export const createRsvp = async (req, res) => {
     const { status } = req.body;
     const userId = req.user.sub;
     
+    // Only attendees can create RSVPs
+    if (req.user.role !== 'attendee' && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Only attendees can create RSVPs' });
+    }
+    
     // Check if RSVP already exists
     const existing = await pool.query(
       'SELECT id FROM attendees WHERE user_id = $1 AND event_id = $2',
@@ -384,7 +412,33 @@ export const updateRsvp = async (req, res) => {
   try {
     const { eventId } = req.params;
     const { status } = req.body;
-    const userId = req.user.sub;
+    let userId = req.user.sub;
+    
+    // Organizers can update RSVPs for their events, attendees can only update their own
+    if (req.user.role === 'organizer') {
+      // Verify the organizer owns this event
+      const axios = require('axios');
+      const token = req.headers.authorization;
+      try {
+        const eventResponse = await axios.get(`http://events-service:8002/v1/events/${eventId}`, {
+          headers: { Authorization: token }
+        });
+        if (eventResponse.data.organizerId !== req.user.sub) {
+          return res.status(403).json({ detail: 'You can only update RSVPs for your own events' });
+        }
+        // Organizers can specify userId in body to update any attendee's RSVP
+        if (req.body.userId) {
+          userId = req.body.userId;
+        }
+      } catch (error) {
+        if (error.response?.status === 404) {
+          return res.status(404).json({ detail: 'Event not found' });
+        }
+        throw error;
+      }
+    } else if (req.user.role !== 'attendee') {
+      return res.status(403).json({ detail: 'Only attendees and organizers can update RSVPs' });
+    }
     
     // Check if RSVP exists
     const existing = await pool.query(
