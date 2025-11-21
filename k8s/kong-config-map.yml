@@ -46,6 +46,7 @@ data:
             - http://localhost:3000
             - http://localhost:8000
             - http://127.0.0.1:3000
+            - https://api-docs.c-282f7f4.kyma.ondemand.com
           preflight_continue: false
           private_network: false
         enabled: true
