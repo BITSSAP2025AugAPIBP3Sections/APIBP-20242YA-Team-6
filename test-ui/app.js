@@ -692,6 +692,59 @@ async function updateTaskStatus(taskId, status) {
     }
 }
 
+function handleCreateTask(e) {
+    e.preventDefault();
+    const title = document.getElementById('taskTitle').value.trim();
+    const description = document.getElementById('taskDescription').value.trim();
+    const eventId = parseInt(document.getElementById('taskEventId').value);
+    const vendorId = document.getElementById('taskVendorId').value.trim();
+
+    closeModal();
+    createTask({ title, description, status: 'pending', eventId, vendorId: vendorId || null });
+}
+
+async function createTask(data) {
+    const result = await apiCall('/v1/tasks', 'POST', data);
+    if (result.success) {
+        showToast('Success', 'Task created!', 'success');
+        loadRoleData(currentUser.role);
+    } else {
+        showToast('Error', result.error, 'error');
+    }
+}
+
+function editEvent(eventId) {
+    showToast('Info', 'Edit functionality coming soon!', 'info');
+}
+
+function closeModal() {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// ===== Utility Functions =====
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+        return new Date(dateStr).toLocaleString();
+    } catch {
+        return dateStr;
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Event Management System - Role-Based UI loaded');
+});
+
 async function deleteEvent(eventId) {
     if (!confirm('Are you sure you want to delete this event?')) return;
 
@@ -891,56 +944,3 @@ function openCreateTaskModal() {
     `;
     document.body.appendChild(modal);
 }
-
-function handleCreateTask(e) {
-    e.preventDefault();
-    const title = document.getElementById('taskTitle').value.trim();
-    const description = document.getElementById('taskDescription').value.trim();
-    const eventId = parseInt(document.getElementById('taskEventId').value);
-    const vendorId = document.getElementById('taskVendorId').value.trim();
-
-    closeModal();
-    createTask({ title, description, status: 'pending', eventId, vendorId: vendorId || null });
-}
-
-async function createTask(data) {
-    const result = await apiCall('/v1/tasks', 'POST', data);
-    if (result.success) {
-        showToast('Success', 'Task created!', 'success');
-        loadRoleData(currentUser.role);
-    } else {
-        showToast('Error', result.error, 'error');
-    }
-}
-
-function editEvent(eventId) {
-    showToast('Info', 'Edit functionality coming soon!', 'info');
-}
-
-function closeModal() {
-    const modal = document.querySelector('.modal-overlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-// ===== Utility Functions =====
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return 'N/A';
-    try {
-        return new Date(dateStr).toLocaleString();
-    } catch {
-        return dateStr;
-    }
-}
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('Event Management System - Role-Based UI loaded');
-});
