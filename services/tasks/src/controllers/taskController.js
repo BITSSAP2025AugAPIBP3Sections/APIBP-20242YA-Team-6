@@ -2,29 +2,190 @@ import pool from '../config/database.js';
 import { publishNotification } from '../config/kafka.js';
 import { getUserEmail, getVendorEmail, getVendorUserId } from '../utils/externalServices.js';
 
+function buildPaginationInfo(page, pageSize, totalCount) {
+    const totalPages = Math.ceil(totalCount / pageSize) || 1;
+    const hasNext = page < totalPages;
+    const hasPrev = page > 1;
+
+    return {
+        current_page: page,
+        page_size: pageSize,
+        total_count: totalCount,
+        total_pages: totalPages,
+        has_next: hasNext,
+        has_previous: hasPrev,
+        next_page: hasNext ? page + 1 : null,
+        previous_page: hasPrev ? page - 1 : null
+    };
+}
+
+function applyFilters(conditions, values, filters, userRole, userId) {
+    let paramCount = values.length + 1;
+
+    // Role-based filtering
+    if (userRole === 'vendor') {
+        conditions.push(`vendor_id = $${paramCount++}`);
+        values.push(userId);
+    }
+
+    if (filters.title) {
+        conditions.push(`title ILIKE $${paramCount++}`);
+        values.push(`%${filters.title}%`);
+    }
+    if (filters.status) {
+        conditions.push(`status = $${paramCount++}`);
+        values.push(filters.status);
+    }
+    if (filters.eventId) {
+        conditions.push(`event_id = $${paramCount++}`);
+        values.push(filters.eventId);
+    }
+    if (filters.vendorId) {
+        conditions.push(`vendor_id = $${paramCount++}`);
+        values.push(filters.vendorId);
+    }
+    if (filters.organizerId) {
+        conditions.push(`organizer_id = $${paramCount++}`);
+        values.push(filters.organizerId);
+    }
+    if (filters.search) {
+        conditions.push(`(title ILIKE $${paramCount} OR description ILIKE $${paramCount})`);
+        values.push(`%${filters.search}%`);
+        paramCount++;
+    }
+
+    return paramCount;
+}
+
+function selectFields(taskData, fields) {
+    if (!fields || fields.length === 0) {
+        return taskData;
+    }
+
+    const validFields = ['id', 'title', 'description', 'status', 'eventId', 'vendorId', 'organizerId', 'createdAt', 'updatedAt'];
+    const invalidFields = fields.filter(f => !validFields.includes(f));
+
+    if (invalidFields.length > 0) {
+        throw new Error(`Invalid fields: ${invalidFields.join(', ')}. Valid fields: ${validFields.join(', ')}`);
+    }
+
+    const result = {};
+    fields.forEach(field => {
+        if (taskData.hasOwnProperty(field)) {
+            result[field] = taskData[field];
+        }
+    });
+
+    return result;
+}
+
 export async function getAllTasks(req, res) {
     try {
         const userRole = req.user.role;
         const userId = req.user.sub;
-        let result;
 
-        if (userRole === 'admin' || userRole === 'organizer') {
-            // Admins and organizers can see all tasks
-            result = await pool.query(
-                'SELECT id, title, description, status, event_id as "eventId", vendor_id as "vendorId", organizer_id as "organizerId" FROM tasks ORDER BY created_at DESC'
-            );
-        } else if (userRole === 'vendor') {
-            // Vendors can only see tasks assigned to them
-            result = await pool.query(
-                'SELECT id, title, description, status, event_id as "eventId", vendor_id as "vendorId", organizer_id as "organizerId" FROM tasks WHERE vendor_id = $1 ORDER BY created_at DESC',
-                [userId]
-            );
-        } else {
-            // Attendees get empty array (no task access)
-            return res.json([]);
+        // Attendees have no task access
+        if (userRole === 'attendee') {
+            return res.json({
+                data: [],
+                pagination: buildPaginationInfo(1, 10, 0)
+            });
         }
 
-        res.json(result.rows);
+        // Parse query parameters
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 10));
+        const sortBy = req.query.sort_by || 'id';
+        const sortOrder = (req.query.sort_order || 'desc').toLowerCase();
+        const fields = req.query.fields ? req.query.fields.split(',').map(f => f.trim()).filter(f => f) : null;
+
+        // Parse filters
+        const filters = {
+            title: req.query.title,
+            status: req.query.status,
+            eventId: req.query.event_id,
+            vendorId: req.query.vendor_id,
+            organizerId: req.query.organizer_id,
+            search: req.query.search
+        };
+
+        // Validate sort parameters
+        const validSortFields = ['id', 'title', 'status', 'eventId', 'vendorId', 'organizerId', 'createdAt', 'updatedAt'];
+        const fieldMapping = {
+            'id': 'id',
+            'title': 'title',
+            'status': 'status',
+            'eventId': 'event_id',
+            'vendorId': 'vendor_id',
+            'organizerId': 'organizer_id',
+            'createdAt': 'created_at',
+            'updatedAt': 'updated_at'
+        };
+
+        if (!validSortFields.includes(sortBy)) {
+            return res.status(400).json({
+                detail: `Invalid sort field. Must be one of: ${validSortFields.join(', ')}`
+            });
+        }
+
+        if (!['asc', 'desc'].includes(sortOrder)) {
+            return res.status(400).json({
+                detail: 'Invalid sort order. Must be "asc" or "desc"'
+            });
+        }
+
+        // Build WHERE conditions
+        const conditions = [];
+        const values = [];
+        applyFilters(conditions, values, filters, userRole, userId);
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // Get total count
+        const countQuery = `SELECT COUNT(*) FROM tasks ${whereClause}`;
+        const countResult = await pool.query(countQuery, values);
+        const totalCount = parseInt(countResult.rows[0].count);
+
+        // Build and execute main query
+        const sortColumn = fieldMapping[sortBy];
+        const offset = (page - 1) * pageSize;
+
+        const dataQuery = `
+            SELECT 
+                id, 
+                title, 
+                description, 
+                status, 
+                event_id as "eventId", 
+                vendor_id as "vendorId", 
+                organizer_id as "organizerId",
+                created_at as "createdAt",
+                updated_at as "updatedAt"
+            FROM tasks 
+            ${whereClause}
+            ORDER BY ${sortColumn} ${sortOrder.toUpperCase()}
+            LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+        `;
+
+        const dataResult = await pool.query(dataQuery, [...values, pageSize, offset]);
+
+        // Apply field selection if specified
+        let tasks = dataResult.rows;
+        if (fields) {
+            try {
+                tasks = tasks.map(task => selectFields(task, fields));
+            } catch (error) {
+                return res.status(400).json({ detail: error.message });
+            }
+        }
+
+        // Build pagination info
+        const pagination = buildPaginationInfo(page, pageSize, totalCount);
+
+        res.json({
+            data: tasks,
+            pagination
+        });
     } catch (error) {
         console.error('Error fetching tasks:', error);
         res.status(500).json({ detail: 'Internal server error' });

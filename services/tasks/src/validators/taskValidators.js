@@ -1,4 +1,4 @@
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
 export const createTaskValidation = [
     body('title').notEmpty().trim().withMessage('Title is required'),
@@ -18,4 +18,18 @@ export const updateTaskValidation = [
 
 export const taskIdValidation = [
     param('id').isInt().withMessage('Task ID must be an integer')
+];
+
+export const getAllTasksValidation = [
+    query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+    query('page_size').optional().isInt({ min: 1, max: 100 }).withMessage('Page size must be between 1 and 100'),
+    query('sort_by').optional().isIn(['id', 'title', 'status', 'eventId', 'vendorId', 'organizerId', 'createdAt', 'updatedAt']).withMessage('Invalid sort field'),
+    query('sort_order').optional().isIn(['asc', 'desc']).withMessage('Sort order must be "asc" or "desc"'),
+    query('status').optional().isIn(['pending', 'in_progress', 'completed']).withMessage('Invalid status filter'),
+    query('event_id').optional().isInt().withMessage('Event ID must be an integer'),
+    query('vendor_id').optional().isInt().withMessage('Vendor ID must be an integer'),
+    query('organizer_id').optional().isInt().withMessage('Organizer ID must be an integer'),
+    query('title').optional().trim(),
+    query('search').optional().trim(),
+    query('fields').optional().trim()
 ];

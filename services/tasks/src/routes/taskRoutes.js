@@ -11,7 +11,8 @@ import {
 import {
     createTaskValidation,
     updateTaskValidation,
-    taskIdValidation
+    taskIdValidation,
+    getAllTasksValidation
 } from '../validators/taskValidators.js';
 
 const router = express.Router();
@@ -24,7 +25,7 @@ const validate = (req, res, next) => {
     next();
 };
 
-router.get('/tasks', verifyToken, getAllTasks);
+router.get('/tasks', verifyToken, getAllTasksValidation, validate, getAllTasks);
 router.post('/tasks', verifyToken, requireRole('admin', 'organizer'), createTaskValidation, validate, createTask);
 router.get('/tasks/:id', verifyToken, taskIdValidation, validate, getTaskById);
 router.patch('/tasks/:id', verifyToken, requireRole('admin', 'organizer', 'vendor'), updateTaskValidation, validate, updateTask);
