@@ -16,82 +16,82 @@ Concise REST API demonstration using Swagger UI with 4-person scenario.
 
 ## 🎭 Characters
 
-- **Alice Chen** - Event Organizer (admin)
-- **Bob Martinez** - Vendor (AV Solutions Inc)
-- **Carol Davis** - Vendor (Catering Masters)
-- **David Kim** - Attendee
+- **Sarah Johnson** - Event Organizer (admin)
+- **Mike Thompson** - Vendor (AV Solutions Inc)
+- **Emma Wilson** - Vendor (Catering Masters)
+- **Alex Rodriguez** - Attendee
 
 ---
 
 ## 📋 ACT 1: Registration & Authentication
 
-### Alice Registers (Admin)
+### Sarah Registers (Admin)
 
 `POST /v1/auth/register`
 
 ```json
 {
-  "email": "alice.chen@eventmanager.com",
-  "password": "Alice2025!",
+  "email": "sarah.johnson@eventpro.com",
+  "password": "Sarah2025!",
   "role": "admin"
 }
 ```
 
-**Save token as `ALICE_TOKEN`**
+**Save token as `SARAH_TOKEN`**
 
 ---
 
-### Bob Registers (Vendor)
+### Mike Registers (Vendor)
 
 `POST /v1/auth/register`
 
 ```json
 {
-  "email": "bob.martinez@avsolutions.com",
-  "password": "Bob2025!",
+  "email": "mike.thompson@avsolutions.com",
+  "password": "Mike2025!",
   "role": "vendor"
 }
 ```
 
-**Save token as `BOB_TOKEN`**
+**Save token as `MIKE_TOKEN`**
 
 ---
 
-### Carol Registers (Vendor)
+### Emma Registers (Vendor)
 
 `POST /v1/auth/register`
 
 ```json
 {
-  "email": "carol.davis@cateringmasters.com",
-  "password": "Carol2025!",
+  "email": "emma.wilson@cateringmasters.com",
+  "password": "Emma2025!",
   "role": "vendor"
 }
 ```
 
-**Save token as `CAROL_TOKEN`**
+**Save token as `EMMA_TOKEN`**
 
 ---
 
-### David Registers (Attendee)
+### Alex Registers (Attendee)
 
 `POST /v1/auth/register`
 
 ```json
 {
-  "email": "david.kim@techmail.com",
-  "password": "David2025!",
+  "email": "alex.rodriguez@techmail.com",
+  "password": "Alex2025!",
   "role": "attendee"
 }
 ```
 
-**Save token as `DAVID_TOKEN`**
+**Save token as `ALEX_TOKEN`**
 
 ---
 
-## 📋 ACT 2: Alice Creates Event
+## 📋 ACT 2: Sarah Creates Event
 
-**🔐 Auth**: Use `ALICE_TOKEN`
+**🔐 Auth**: Use `SARAH_TOKEN`
 
 ### Create Tech Conference
 
@@ -109,6 +109,249 @@ Concise REST API demonstration using Swagger UI with 4-person scenario.
 ```
 
 **Save `id` as `EVENT_ID=1`**
+
+---
+
+## 📋 ACT 3: Sarah Adds Vendors
+
+**🔐 Auth**: Use `SARAH_TOKEN`
+
+### Add Mike's Company
+
+`POST /v1/vendors`
+
+```json
+{
+  "name": "AV Solutions Inc",
+  "email": "mike.thompson@avsolutions.com",
+  "phone": "+1-555-0100",
+  "eventId": "1"
+}
+```
+
+**Save `id` as `VENDOR_MIKE_ID=1`**
+
+---
+
+### Add Emma's Company
+
+`POST /v1/vendors`
+
+```json
+{
+  "name": "Catering Masters",
+  "email": "emma.wilson@cateringmasters.com",
+  "phone": "+1-555-0200",
+  "eventId": "1"
+}
+```
+
+**Save `id` as `VENDOR_EMMA_ID=2`**
+
+---
+
+## 📋 ACT 4: Sarah Creates Tasks
+
+**🔐 Auth**: Use `SARAH_TOKEN`
+
+### AV Setup Task for Mike
+
+`POST /v1/tasks`
+
+```json
+{
+  "title": "Setup Complete AV System for Main Hall",
+  "description": "Install 20+ speakers, 4K projectors, wireless microphones, and lighting in Hall A",
+  "status": "pending",
+  "eventId": "1",
+  "vendorId": "1"
+}
+```
+
+**Save `id` as `TASK_AV_ID=1`**
+
+---
+
+### Catering Task for Emma
+
+`POST /v1/tasks`
+
+```json
+{
+  "title": "Full Conference Catering Service",
+  "description": "Provide breakfast, lunch, and refreshments for 500 attendees daily",
+  "status": "pending",
+  "eventId": "1",
+  "vendorId": "2"
+}
+```
+
+**Save `id` as `TASK_CATERING_ID=2`**
+
+---
+
+## 📋 ACT 5: Mike Updates Task
+
+**🔐 Auth**: Use `MIKE_TOKEN`
+
+### Update Task to In Progress
+
+`PATCH /v1/tasks/{id}` (id: 1)
+
+```json
+{
+  "status": "in_progress"
+}
+```
+
+---
+
+## 📋 ACT 6: Emma Updates Task
+
+**🔐 Auth**: Use `EMMA_TOKEN`
+
+### Update Task to In Progress
+
+`PATCH /v1/tasks/{id}` (id: 2)
+
+```json
+{
+  "status": "in_progress"
+}
+```
+
+---
+
+## 📋 ACT 7: Alex RSVPs to Event
+
+**🔐 Auth**: Use `ALEX_TOKEN`
+
+### Browse Events
+
+`GET /v1/events` (page: 1, page_size: 10, sort_by: startAt)
+
+---
+
+### Create RSVP
+
+`POST /v1/events/{eventId}/attendees` (eventId: 1)
+
+```json
+{
+  "status": "going"
+}
+```
+
+**Save `id` as `RSVP_ID=1`**
+
+---
+
+## 📋 ACT 8: Sarah Monitors Progress
+
+**🔐 Auth**: Use `SARAH_TOKEN`
+
+### Check Event Attendees
+
+`GET /v1/events/{eventId}/attendees` (eventId: 1, status: going, sort_by: rsvpAt)
+
+---
+
+### Check Attendees with Field Selection
+
+`GET /v1/attendees/{id}` (id: 1, fields: id,userId,status,rsvpAt)
+
+---
+
+### Check All Tasks
+
+`GET /v1/tasks` (eventId: 1, status: in_progress)
+
+---
+
+## 📋 ACT 9: Vendors Complete Tasks
+
+### Mike Completes Task
+
+**🔐 Auth**: Use `MIKE_TOKEN`
+
+`PATCH /v1/tasks/{id}` (id: 1)
+
+```json
+{
+  "status": "completed"
+}
+```
+
+---
+
+### Emma Completes Task
+
+**🔐 Auth**: Use `EMMA_TOKEN`
+
+`PATCH /v1/tasks/{id}` (id: 2)
+
+```json
+{
+  "status": "completed"
+}
+```
+
+---
+
+## 📋 ACT 10: Final Updates
+
+### Alex Updates RSVP
+
+**🔐 Auth**: Use `ALEX_TOKEN`
+
+`PUT /v1/events/{eventId}/attendees` (eventId: 1)
+
+```json
+{
+  "status": "going"
+}
+```
+
+---
+
+## 📋 ACT 11: Sarah Updates Event
+
+**🔐 Auth**: Use `SARAH_TOKEN`
+
+### Update Event Status
+
+`PATCH /v1/events/{id}` (id: 1)
+
+```json
+{
+  "name": "Tech Conference 2025 - AI & Cloud Summit [CONFIRMED]",
+  "description": "All vendor preparations complete!"
+}
+```
+
+---
+
+## 📋 Bonus: Advanced Features
+
+### Multi-Filter Attendee Search
+
+`GET /v1/attendees` (eventId: 1, status: going, sort_by: rsvpAt, sort_order: desc)
+
+---
+
+### Field Selection
+
+`GET /v1/attendees/{id}` (id: 1, fields: id,status,rsvpAt)
+
+---
+
+### Test Access Control (Should Fail)
+
+**🔐 Auth**: Use `ALEX_TOKEN`
+
+`DELETE /v1/events/{id}` (id: 1)
+
+**Expected**: ❌ 403 Forbidden
 
 ---
 
@@ -375,10 +618,10 @@ Concise REST API demonstration using Swagger UI with 4-person scenario.
 
 | Name | Role | Email |
 |------|------|-------|
-| Alice Chen | Admin | alice.chen@eventmanager.com |
-| Bob Martinez | Vendor | bob.martinez@avsolutions.com |
-| Carol Davis | Vendor | carol.davis@cateringmasters.com |
-| David Kim | Attendee | david.kim@techmail.com |
+| Sarah Johnson | Admin | sarah.johnson@eventpro.com |
+| Mike Thompson | Vendor | mike.thompson@avsolutions.com |
+| Emma Wilson | Vendor | emma.wilson@cateringmasters.com |
+| Alex Rodriguez | Attendee | alex.rodriguez@techmail.com |
 
 ---
 
