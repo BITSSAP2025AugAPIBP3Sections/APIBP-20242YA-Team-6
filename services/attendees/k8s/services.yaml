@@ -25,5 +25,9 @@ spec:
       targetPort: 8005
       protocol: TCP
       name: http
+    - port: 50052
+      targetPort: 50052
+      protocol: TCP
+      name: grpc
   selector:
     app: attendees-service
