@@ -25,15 +25,25 @@ const validate = (req, res, next) => {
   next();
 };
 
-// Routes for attendees with pagination, sorting, filtering, and field selection
-router.get('/attendees', verifyToken, getUserAttendees);
-router.get('/attendees/:id', verifyToken, attendeeIdValidation, validate, getAttendeeById);
-
-// Routes for event attendees with pagination, sorting, filtering, and field selection
+// ============================================================================
+// ORGANIZER ROUTES - View attendees/RSVPs for their events
+// ============================================================================
+// Get all attendees/RSVPs for a specific event (organizers, admins)
 router.get('/events/:eventId/attendees', verifyToken, eventIdValidation, validate, getEventAttendees);
 
-// RSVP management routes
-router.post('/events/:eventId/attendees', verifyToken, createRsvpValidation, validate, createRsvp);
-router.put('/events/:eventId/attendees', verifyToken, updateRsvpValidation, validate, updateRsvp);
+// ============================================================================
+// ATTENDEE ROUTES - Manage their own RSVPs
+// ============================================================================
+// Get all my RSVPs across all events
+router.get('/rsvps', verifyToken, getUserAttendees);
+
+// Get details of a specific RSVP by ID
+router.get('/rsvps/:id', verifyToken, attendeeIdValidation, validate, getAttendeeById);
+
+// RSVP to an event (attendees only) - RESTful sub-resource pattern
+// POST /events/123/rsvps?status=going
+// PUT /events/123/rsvps?status=interested
+router.post('/events/:eventId/rsvps', verifyToken, createRsvpValidation, validate, createRsvp);
+router.put('/events/:eventId/rsvps', verifyToken, updateRsvpValidation, validate, updateRsvp);
 
 export default router;

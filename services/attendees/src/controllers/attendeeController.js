@@ -1,6 +1,18 @@
-import pool from '../config/database.js';
+import { pool } from '../config/database.js';
 import { publishNotification } from '../config/kafka.js';
+import grpc from '@grpc/grpc-js';
 import axios from 'axios';
+
+// Helper function to get user email from auth service
+async function getUserEmail(userId) {
+  try {
+    const response = await axios.get(`http://auth-service:8001/v1/users/${userId}`);
+    return response.data?.email;
+  } catch (error) {
+    console.error(`Failed to get email for user ${userId}:`, error.message);
+    return null;
+  }
+}
 
 function buildPaginationInfo(page, pageSize, totalCount) {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
@@ -362,7 +374,7 @@ export const getEventAttendees = async (req, res) => {
 export const createRsvp = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { status } = req.body;
+    const { status } = req.query;
     const userId = req.user.sub;
     
     // Only attendees can create RSVPs
@@ -390,11 +402,13 @@ export const createRsvp = async (req, res) => {
     
     // Notify user about their RSVP
     const statusEmoji = status === 'going' ? '✅' : status === 'interested' ? '🤔' : '❌';
+    const userEmail = await getUserEmail(userId);
     await publishNotification(
       userId,
       'rsvp_confirmed',
       `${statusEmoji} Your RSVP for event #${eventId} has been confirmed as "${status}".`,
-      { eventId, status }
+      { eventId, status },
+      userEmail
     );
     
     res.status(201).json(rsvp);
@@ -411,33 +425,12 @@ export const createRsvp = async (req, res) => {
 export const updateRsvp = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { status } = req.body;
-    let userId = req.user.sub;
+    const { status } = req.query;
+    const userId = req.user.sub;
     
-    // Organizers can update RSVPs for their events, attendees can only update their own
-    if (req.user.role === 'organizer') {
-      // Verify the organizer owns this event
-      const axios = require('axios');
-      const token = req.headers.authorization;
-      try {
-        const eventResponse = await axios.get(`http://events-service:8002/v1/events/${eventId}`, {
-          headers: { Authorization: token }
-        });
-        if (eventResponse.data.organizerId !== req.user.sub) {
-          return res.status(403).json({ detail: 'You can only update RSVPs for your own events' });
-        }
-        // Organizers can specify userId in body to update any attendee's RSVP
-        if (req.body.userId) {
-          userId = req.body.userId;
-        }
-      } catch (error) {
-        if (error.response?.status === 404) {
-          return res.status(404).json({ detail: 'Event not found' });
-        }
-        throw error;
-      }
-    } else if (req.user.role !== 'attendee') {
-      return res.status(403).json({ detail: 'Only attendees and organizers can update RSVPs' });
+    // Only attendees can update their own RSVPs
+    if (req.user.role !== 'attendee' && req.user.role !== 'admin') {
+      return res.status(403).json({ detail: 'Only attendees can update their RSVPs' });
     }
     
     // Check if RSVP exists
@@ -471,11 +464,13 @@ export const updateRsvp = async (req, res) => {
     
     // Notify user about their RSVP update
     const statusEmoji = status === 'going' ? '✅' : status === 'interested' ? '🤔' : '❌';
+    const userEmail = await getUserEmail(userId);
     await publishNotification(
       userId,
       'rsvp_updated',
       `${statusEmoji} Your RSVP for event #${eventId} has been updated to "${status}".`,
-      { eventId, status, previousStatus: currentStatus }
+      { eventId, status, previousStatus: currentStatus },
+      userEmail
     );
     
     res.json(updatedRsvp);

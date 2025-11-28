@@ -18,7 +18,7 @@ export async function initDB() {
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS attendees (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         user_id VARCHAR(50) NOT NULL,
         event_id VARCHAR(50) NOT NULL,
         status VARCHAR(50) NOT NULL DEFAULT 'invited',
@@ -39,3 +39,4 @@ export async function initDB() {
 }
 
 export default pool;
+export { pool };

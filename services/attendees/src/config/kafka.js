@@ -41,3 +41,14 @@ export async function publishNotification(recipientId, type, message, eventData 
     console.error('Error publishing notification:', error);
   }
 }
+
+export async function disconnectKafka() {
+  if (producer) {
+    try {
+      await producer.disconnect();
+      console.log('✅ Kafka producer disconnected');
+    } catch (error) {
+      console.error('⚠️  Error disconnecting Kafka:', error.message);
+    }
+  }
+}
