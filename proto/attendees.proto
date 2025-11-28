@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package attendees;
+
+service AttendeeService {
+  // Delete all attendees for a specific event
+  rpc DeleteEventAttendees(DeleteEventAttendeesRequest) returns (DeleteEventAttendeesResponse);
+  
+  // Get all attendees for an event (for notifications)
+  rpc GetEventAttendees(GetEventAttendeesRequest) returns (GetEventAttendeesResponse);
+}
+
+message DeleteEventAttendeesRequest {
+  int32 event_id = 1;
+}
+
+message DeleteEventAttendeesResponse {
+  int32 deleted_count = 1;
+  repeated string user_ids = 2;  // List of user IDs who were attending the event
+}
+
+message GetEventAttendeesRequest {
+  int32 event_id = 1;
+}
+
+message GetEventAttendeesResponse {
+  repeated AttendeeInfo attendees = 1;
+}
+
+message AttendeeInfo {
+  string user_id = 1;
+  string status = 2;  // RSVP status: invited, going, interested, not_going
+}

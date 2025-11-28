@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package tasks;
+
+service TaskService {
+  // Delete all tasks for a specific event
+  rpc DeleteEventTasks(DeleteEventTasksRequest) returns (DeleteEventTasksResponse);
+  
+  // Get all vendors associated with an event (for notifications)
+  rpc GetEventVendors(GetEventVendorsRequest) returns (GetEventVendorsResponse);
+}
+
+message DeleteEventTasksRequest {
+  int32 event_id = 1;
+}
+
+message DeleteEventTasksResponse {
+  int32 deleted_count = 1;
+  repeated int32 vendor_ids = 2;  // List of unique vendor IDs that were assigned to deleted tasks
+}
+
+message GetEventVendorsRequest {
+  int32 event_id = 1;
+}
+
+message GetEventVendorsResponse {
+  repeated VendorInfo vendors = 1;
+}
+
+message VendorInfo {
+  int32 vendor_id = 1;
+  string user_id = 2;  // Auth service user ID
+}
