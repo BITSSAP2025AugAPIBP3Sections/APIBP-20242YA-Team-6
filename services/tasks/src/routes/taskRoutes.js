@@ -3,8 +3,8 @@ import { validationResult } from 'express-validator';
 import { verifyToken, requireRole } from '../middleware/auth.js';
 import {
     getAllTasks,
-    createTask,
     getTaskById,
+    createTask,
     updateTask,
     deleteTask
 } from '../controllers/taskController.js';
@@ -25,9 +25,10 @@ const validate = (req, res, next) => {
     next();
 };
 
-router.get('/tasks', verifyToken, getAllTasksValidation, validate, getAllTasks);
+router.get('/tasks', verifyToken,requireRole('admin', 'organizer', 'vendor'), getAllTasksValidation, validate, getAllTasks);
+// Internal endpoint - called by events service (requires auth token for organizer validation)
 router.post('/tasks', verifyToken, requireRole('admin', 'organizer'), createTaskValidation, validate, createTask);
-router.get('/tasks/:id', verifyToken, taskIdValidation, validate, getTaskById);
+router.get('/tasks/:id', verifyToken, requireRole('admin', 'organizer', 'vendor'),taskIdValidation, validate, getTaskById);
 router.patch('/tasks/:id', verifyToken, requireRole('admin', 'organizer', 'vendor'), updateTaskValidation, validate, updateTask);
 router.delete('/tasks/:id', verifyToken, requireRole('admin', 'organizer'), taskIdValidation, validate, deleteTask);
 

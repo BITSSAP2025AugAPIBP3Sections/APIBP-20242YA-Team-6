@@ -30,6 +30,12 @@ function applyFilters(conditions, values, filters, userRole, userId, vendorId = 
         conditions.push(`vendor_id = $${paramCount++}`);
         values.push(vendorId);
     }
+    
+    // Organizers can only see tasks for their own events
+    if (userRole === 'organizer') {
+        conditions.push(`organizer_id = $${paramCount++}`);
+        values.push(userId);
+    }
 
     if (filters.title) {
         conditions.push(`title ILIKE $${paramCount++}`);
@@ -86,14 +92,6 @@ export async function getAllTasks(req, res) {
     try {
         const userRole = req.user.role;
         const userId = req.user.sub;
-
-        // Attendees have no task access
-        if (userRole === 'attendee') {
-            return res.json({
-                data: [],
-                pagination: buildPaginationInfo(1, 10, 0)
-            });
-        }
 
         // For vendors, get their vendorId from userId
         let vendorId = null;
@@ -210,8 +208,10 @@ export async function getAllTasks(req, res) {
 
 export async function createTask(req, res) {
     try {
-        const { title, description, status, eventId, vendorId } = req.body;
-        const organizerId = req.user.sub; // Get organizer ID from JWT token
+        const { title, description, status, eventId, vendorId, organizerId } = req.body;
+        
+        // Use organizerId from request body (passed by events service) or from JWT token
+        const effectiveOrganizerId = organizerId || req.user.sub;
         
         // Organizers can only create tasks for their own events
         if (req.user.role === 'organizer') {
@@ -233,7 +233,7 @@ export async function createTask(req, res) {
 
         const result = await pool.query(
             'INSERT INTO tasks (title, description, status, event_id, vendor_id, organizer_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title, description, status, event_id as "eventId", vendor_id as "vendorId", organizer_id as "organizerId"',
-            [title, description, status || 'pending', eventId, vendorId || null, organizerId]
+            [title, description, status || 'pending', eventId, vendorId || null, effectiveOrganizerId]
         );
 
         const task = result.rows[0];
@@ -271,6 +271,19 @@ export async function createTask(req, res) {
 export async function getTaskById(req, res) {
     try {
         const { id } = req.params;
+        const userRole = req.user.role;
+        const userId = req.user.sub;
+        
+        // For vendors, get their vendorId from userId
+        let vendorId = null;
+        if (userRole === 'vendor') {
+            vendorId = await getVendorIdFromUserId(userId);
+            console.log(`🔍 Vendor lookup: userId=${userId}, vendorId=${vendorId}`);
+            if (!vendorId) {
+                return res.status(404).json({ detail: 'Vendor profile not found' });
+            }
+        }
+        
         const result = await pool.query(
             'SELECT id, title, description, status, event_id as "eventId", vendor_id as "vendorId", organizer_id as "organizerId" FROM tasks WHERE id = $1',
             [id]
@@ -283,32 +296,15 @@ export async function getTaskById(req, res) {
         const task = result.rows[0];
         
         // Vendors can only view tasks assigned to them
-        // Note: task.vendorId is the vendor record ID, req.user.sub is the userId
-        if (req.user.role === 'vendor' && task.vendorId) {
-            const vendorUserId = await getUserIdFromVendorId(task.vendorId);
-            if (vendorUserId !== req.user.sub) {
+        if (userRole === 'vendor') {
+            console.log(`🔒 Access check: task.vendorId=${task.vendorId} (type: ${typeof task.vendorId}), vendorId=${vendorId} (type: ${typeof vendorId}), match=${task.vendorId === vendorId}`);
+            if (task.vendorId !== vendorId) {
                 return res.status(403).json({ detail: 'You can only view tasks assigned to you' });
             }
-        } else if (req.user.role === 'vendor' && !task.vendorId) {
-            return res.status(403).json({ detail: 'You can only view tasks assigned to you' });
         }
         
         // Organizers can only view tasks for their own events
-        if (req.user.role === 'organizer' && task.organizerId !== req.user.sub) {
-            return res.status(403).json({ detail: 'You can only view tasks for your own events' });
-        }
-
-        res.json(task);
-
-        res.json(task);
-        
-        // Vendors can only view tasks assigned to them
-        if (req.user.role === 'vendor' && task.vendorId !== req.user.sub) {
-            return res.status(403).json({ detail: 'You can only view tasks assigned to you' });
-        }
-        
-        // Organizers can only view tasks for their own events
-        if (req.user.role === 'organizer' && task.organizerId !== req.user.sub) {
+        if (userRole === 'organizer' && task.organizerId !== userId) {
             return res.status(403).json({ detail: 'You can only view tasks for your own events' });
         }
 
@@ -392,6 +388,52 @@ export async function updateTask(req, res) {
 
         const updatedTask = result.rows[0];
 
+        // Send notifications for vendor assignment/reassignment
+        if (vendorId !== undefined && vendorId !== currentTask.vendor_id) {
+            // Notify the new vendor about the assignment
+            if (vendorId) {
+                const newVendorUserId = await getUserIdFromVendorId(vendorId);
+                if (newVendorUserId) {
+                    const newVendorEmail = await getUserEmail(newVendorUserId);
+                    await publishNotification(
+                        newVendorUserId,
+                        'task_assigned',
+                        `🎯 You have been assigned to task: "${updatedTask.title}"`,
+                        {
+                            taskId: updatedTask.id,
+                            taskTitle: updatedTask.title,
+                            taskStatus: updatedTask.status,
+                            eventId: updatedTask.eventId,
+                            vendorId: vendorId
+                        },
+                        newVendorEmail
+                    );
+                    console.log(`✅ Sent task assignment notification to vendor ${vendorId} (user ${newVendorUserId})`);
+                }
+            }
+
+            // Notify the old vendor about unassignment (if there was one)
+            if (currentTask.vendor_id) {
+                const oldVendorUserId = await getUserIdFromVendorId(currentTask.vendor_id);
+                if (oldVendorUserId) {
+                    const oldVendorEmail = await getUserEmail(oldVendorUserId);
+                    await publishNotification(
+                        oldVendorUserId,
+                        'task_unassigned',
+                        `ℹ️ You have been unassigned from task: "${updatedTask.title}"`,
+                        {
+                            taskId: updatedTask.id,
+                            taskTitle: updatedTask.title,
+                            eventId: updatedTask.eventId,
+                            oldVendorId: currentTask.vendor_id
+                        },
+                        oldVendorEmail
+                    );
+                    console.log(`✅ Sent task unassignment notification to previous vendor ${currentTask.vendor_id} (user ${oldVendorUserId})`);
+                }
+            }
+        }
+
         // Send notifications for status updates
         if (status && status !== currentTask.status && currentTask.organizer_id) {
             const statusEmoji = status === 'completed' ? '✅' : status === 'in_progress' ? '🔄' : '📋';
@@ -425,24 +467,48 @@ export async function deleteTask(req, res) {
     try {
         const { id } = req.params;
         
+        // Get task data before deletion to send notifications
+        const taskResult = await pool.query(
+            'SELECT id, title, event_id, vendor_id, organizer_id FROM tasks WHERE id = $1',
+            [id]
+        );
+
+        if (taskResult.rows.length === 0) {
+            return res.status(404).json({ detail: 'Task not found' });
+        }
+
+        const task = taskResult.rows[0];
+        
         // Organizers can only delete tasks for their own events
-        if (req.user.role === 'organizer') {
-            const checkResult = await pool.query(
-                'SELECT organizer_id FROM tasks WHERE id = $1',
-                [id]
-            );
-            if (checkResult.rows.length === 0) {
-                return res.status(404).json({ detail: 'Task not found' });
-            }
-            if (checkResult.rows[0].organizer_id !== req.user.sub) {
-                return res.status(403).json({ detail: 'You can only delete tasks for your own events' });
-            }
+        if (req.user.role === 'organizer' && task.organizer_id !== req.user.sub) {
+            return res.status(403).json({ detail: 'You can only delete tasks for your own events' });
         }
         
         const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING id', [id]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({ detail: 'Task not found' });
+        }
+
+        // Notify vendor if task was assigned
+        if (task.vendor_id) {
+            const vendorUserId = await getUserIdFromVendorId(task.vendor_id);
+            if (vendorUserId) {
+                const vendorEmail = await getUserEmail(vendorUserId);
+                await publishNotification(
+                    vendorUserId,
+                    'task_deleted',
+                    `🗑️ Task "${task.title}" has been deleted`,
+                    {
+                        taskId: task.id,
+                        taskTitle: task.title,
+                        eventId: task.event_id,
+                        vendorId: task.vendor_id
+                    },
+                    vendorEmail
+                );
+                console.log(`✅ Sent task deletion notification to vendor ${task.vendor_id} (user ${vendorUserId})`);
+            }
         }
 
         res.status(204).send();
