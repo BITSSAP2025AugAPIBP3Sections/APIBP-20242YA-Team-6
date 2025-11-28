@@ -20,20 +20,19 @@ class VendorCreate(BaseModel):
     name: str
     email: EmailStr
     phone: Optional[str] = None
-    eventId: str
+    user_id: Optional[int] = None
 
 class VendorUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
-    eventId: Optional[str] = None
 
 class VendorResponse(BaseModel):
     id: str
     name: str
     email: str
     phone: Optional[str]
-    eventId: str
+    
     class Config:
         from_attributes = True
 
@@ -42,6 +41,10 @@ class PaginatedVendorResponse(BaseModel):
     pagination: Dict[str, Any]
     filters: Optional[Dict[str, Any]] = None
     sorting: Optional[Dict[str, str]] = None
+    
+    class Config:
+        # Allow arbitrary types and don't validate the vendors list structure
+        arbitrary_types_allowed = True
 
 class VendorFilter(BaseModel):
     name: Optional[str] = None
@@ -76,21 +79,18 @@ def apply_filters(query, filters: VendorFilter):
         query = query.filter(DBVendor.email.ilike(f"%{filters.email}%"))
     if filters.phone:
         query = query.filter(DBVendor.phone.ilike(f"%{filters.phone}%"))
-    if filters.eventId:
-        query = query.filter(DBVendor.event_id.ilike(f"%{filters.eventId}%"))
     if filters.search:
         search_term = f"%{filters.search}%"
         query = query.filter(or_(
             DBVendor.name.ilike(search_term),
             DBVendor.email.ilike(search_term),
-            DBVendor.phone.ilike(search_term),
-            DBVendor.event_id.ilike(search_term)
+            DBVendor.phone.ilike(search_term)
         ))
     return query
 
 def apply_sorting(query, sort_by: str, sort_order: str):
     """Apply sorting to the database query."""
-    valid_fields = ['id', 'name', 'email', 'phone', 'eventId']
+    valid_fields = ['id', 'name', 'email', 'phone']
     if sort_by not in valid_fields:
         raise HTTPException(status_code=400, detail=f"Invalid sort field. Must be one of: {valid_fields}")
     
@@ -98,8 +98,7 @@ def apply_sorting(query, sort_by: str, sort_order: str):
         'id': DBVendor.id,
         'name': DBVendor.name,
         'email': DBVendor.email,
-        'phone': DBVendor.phone,
-        'eventId': DBVendor.event_id
+        'phone': DBVendor.phone
     }
     
     column = field_mapping[sort_by]
@@ -115,7 +114,7 @@ def select_fields(vendor_data: dict, fields: List[str]) -> dict:
     if not fields:
         return vendor_data
     
-    valid_fields = ['id', 'name', 'email', 'phone', 'eventId']
+    valid_fields = ['id', 'name', 'email', 'phone']
     invalid_fields = [f for f in fields if f not in valid_fields]
     if invalid_fields:
         raise HTTPException(status_code=400, detail=f"Invalid fields: {invalid_fields}. Valid fields: {valid_fields}")
@@ -142,6 +141,10 @@ def build_pagination_info(page: int, page_size: int, total_count: int) -> dict:
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    # Start Kafka consumer for vendor auto-creation
+    from src.kafka_consumer import start_kafka_consumer
+    start_kafka_consumer()
+    print("[Startup] Kafka consumer started for vendor auto-creation")
 
 @app.get("/health")
 async def health_check():
@@ -151,20 +154,22 @@ async def health_check():
 async def list_vendors(
     page: int = Query(1, ge=1, description="Page number (starts from 1)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of vendors per page"),
-    sort_by: str = Query("id", description="Field to sort by (id, name, email, phone, eventId)"),
+    sort_by: str = Query("id", description="Field to sort by (id, name, email, phone)"),
     sort_order: str = Query("asc", regex="^(asc|desc)$", description="Sort order (asc or desc)"),
     fields: Optional[str] = Query(None, description="Comma-separated list of fields to return"),
     name: Optional[str] = Query(None, description="Filter by vendor name (partial match)"),
     email: Optional[str] = Query(None, description="Filter by vendor email (partial match)"),
     phone: Optional[str] = Query(None, description="Filter by vendor phone (partial match)"),
-    eventId: Optional[str] = Query(None, description="Filter by event ID (partial match)"),
     search: Optional[str] = Query(None, description="Global search across all text fields"),
     user=Depends(verify_token),
     db: Session = Depends(get_db)
 ):
-    # Only organizers and admins can view vendors
-    if user.get("role") not in ["admin", "organizer"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only organizers and admins can view vendors")
+    user_role = user.get("role")
+    user_id = user.get("sub")
+    
+    # Role-based access control
+    if user_role not in ["admin", "organizer", "vendor"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     """
     List vendors with advanced filtering, sorting, pagination, and field selection.
     
@@ -184,12 +189,16 @@ async def list_vendors(
         name=name,
         email=email,
         phone=phone,
-        eventId=eventId,
+        eventId=None,
         search=search
     )
     
     # Start building the query
     query = db.query(DBVendor)
+    
+    # Vendors can only see their own profile
+    if user_role == "vendor":
+        query = query.filter(DBVendor.user_id == user_id)
     
     # Apply filters
     query = apply_filters(query, filters)
@@ -211,8 +220,7 @@ async def list_vendors(
             "id": str(v.id),
             "name": v.name,
             "email": v.email,
-            "phone": v.phone,
-            "eventId": v.event_id
+            "phone": v.phone
         }
         
         # Apply field selection if specified
@@ -229,7 +237,6 @@ async def list_vendors(
     if name: applied_filters["name"] = name
     if email: applied_filters["email"] = email
     if phone: applied_filters["phone"] = phone
-    if eventId: applied_filters["eventId"] = eventId
     if search: applied_filters["search"] = search
     
     sorting_info = {
@@ -245,32 +252,42 @@ async def list_vendors(
     )
 
 @app.post("/v1/vendors", response_model=VendorResponse, status_code=status.HTTP_201_CREATED)
-async def create_vendor(vendor_data: VendorCreate, user=Depends(require_role("admin", "organizer")), db: Session = Depends(get_db)):
-    # Organizers can only create vendors for their own events
-    if user.get("role") == "organizer":
-        import httpx
-        async with httpx.AsyncClient() as client:
-            try:
-                event_response = await client.get(
-                    f"http://events-service:8002/v1/events/{vendor_data.eventId}",
-                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
-                )
-                event_data = event_response.json()
-                if event_data.get("organizerId") != user.get("sub"):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only create vendors for your own events")
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-                raise
+async def create_vendor(vendor_data: VendorCreate, user=Depends(require_role("admin")), db: Session = Depends(get_db)):
+    """Create a new vendor (global vendor catalog). Only admins can manually create vendors.
+    Vendors are typically auto-created when users register with role='vendor'.
+    """
     
+    # Check if vendor with email already exists
     existing = db.query(DBVendor).filter(DBVendor.email == vendor_data.email).first()
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Vendor already exists with same email")
-    new_vendor = DBVendor(name=vendor_data.name, email=vendor_data.email, phone=vendor_data.phone, event_id=vendor_data.eventId)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Vendor with this email already exists")
+    
+    # Check if user_id is provided and if it's already linked to another vendor
+    if vendor_data.user_id:
+        existing_by_user_id = db.query(DBVendor).filter(DBVendor.user_id == vendor_data.user_id).first()
+        if existing_by_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, 
+                detail=f"User ID {vendor_data.user_id} is already linked to vendor {existing_by_user_id.email}"
+            )
+    
+    # Create vendor without event association
+    new_vendor = DBVendor(
+        name=vendor_data.name,
+        email=vendor_data.email,
+        phone=vendor_data.phone,
+        user_id=vendor_data.user_id
+    )
     db.add(new_vendor)
     db.commit()
     db.refresh(new_vendor)
-    return VendorResponse(id=str(new_vendor.id), name=new_vendor.name, email=new_vendor.email, phone=new_vendor.phone, eventId=new_vendor.event_id)
+    
+    return VendorResponse(
+        id=str(new_vendor.id),
+        name=new_vendor.name,
+        email=new_vendor.email,
+        phone=new_vendor.phone
+    )
 
 @app.get("/v1/vendors/{id}")
 async def get_vendor(
@@ -284,17 +301,32 @@ async def get_vendor(
     
     Features:
     - Field Selection: Use 'fields' parameter to specify which fields to return
+    - Vendors can only view their own profile
+    - Admins and organizers can view any vendor
     """
+    user_role = user.get("role")
+    user_id = user.get("sub")
+    
+    # Check permissions
+    if user_role not in ["admin", "organizer", "vendor"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    
     vendor = db.query(DBVendor).filter(DBVendor.id == id).first()
     if not vendor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
+    
+    # Vendors can only view their own profile
+    if user_role == "vendor" and vendor.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Vendors can only view their own profile"
+        )
     
     vendor_data = {
         "id": str(vendor.id),
         "name": vendor.name,
         "email": vendor.email,
-        "phone": vendor.phone,
-        "eventId": vendor.event_id
+        "phone": vendor.phone
     }
     
     # Apply field selection if specified
@@ -305,68 +337,71 @@ async def get_vendor(
     return vendor_data
 
 @app.patch("/v1/vendors/{id}", response_model=VendorResponse)
-async def update_vendor(id: int, vendor_data: VendorUpdate, user=Depends(require_role("admin", "organizer")), db: Session = Depends(get_db)):
+async def update_vendor(id: int, vendor_data: VendorUpdate, user=Depends(verify_token), db: Session = Depends(get_db)):
+    """Update vendor information.
+    
+    - Vendors can only update their own profile (matched by user_id)
+    - Admins can update any vendor (for system management)
+    - Organizers CANNOT update vendors (vendors are independent entities)
+    """
+    user_role = user.get("role")
+    user_id = user.get("sub")
+    
+    # Check permissions
+    if user_role not in ["admin", "vendor"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    
     vendor = db.query(DBVendor).filter(DBVendor.id == id).first()
     if not vendor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
     
-    # Organizers can only update vendors for their own events
-    if user.get("role") == "organizer":
-        import httpx
-        async with httpx.AsyncClient() as client:
-            try:
-                event_response = await client.get(
-                    f"http://events-service:8002/v1/events/{vendor.event_id}",
-                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
-                )
-                event_data = event_response.json()
-                if event_data.get("organizerId") != user.get("sub"):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only update vendors for your own events")
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-                raise
+    # Vendors can only update their own profile
+    if user_role == "vendor":
+        if vendor.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Vendors can only update their own profile"
+            )
+        # Vendors cannot change email (it's tied to their auth account)
+        if vendor_data.email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vendors cannot change email. Email is managed by authentication service."
+            )
     
-    if vendor_data.name: vendor.name = vendor_data.name
-    if vendor_data.email:
+    # Update vendor fields
+    if vendor_data.name:
+        vendor.name = vendor_data.name
+    
+    # Only admins can change email
+    if vendor_data.email and user_role == "admin":
         existing = db.query(DBVendor).filter(DBVendor.email == vendor_data.email, DBVendor.id != id).first()
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists for another vendor")
         vendor.email = vendor_data.email
-    if vendor_data.phone is not None: vendor.phone = vendor_data.phone
-    if vendor_data.eventId: vendor.event_id = vendor_data.eventId
+    
+    if vendor_data.phone is not None:
+        vendor.phone = vendor_data.phone
+    
     db.commit()
     db.refresh(vendor)
-    return VendorResponse(id=str(vendor.id), name=vendor.name, email=vendor.email, phone=vendor.phone, eventId=vendor.event_id)
+    
+    return VendorResponse(
+        id=str(vendor.id),
+        name=vendor.name,
+        email=vendor.email,
+        phone=vendor.phone
+    )
 
 @app.delete("/v1/vendors/{id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_vendor(id: int, user=Depends(require_role("admin", "organizer")), db: Session = Depends(get_db)):
+async def delete_vendor(id: int, user=Depends(require_role("admin")), db: Session = Depends(get_db)):
+    """Delete a vendor from the global catalog. Only admins can delete vendors."""
     vendor = db.query(DBVendor).filter(DBVendor.id == id).first()
     if not vendor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
     
-    # Organizers can only delete vendors for their own events
-    if user.get("role") == "organizer":
-        import httpx
-        async with httpx.AsyncClient() as client:
-            try:
-                event_response = await client.get(
-                    f"http://events-service:8002/v1/events/{vendor.event_id}",
-                    headers={"Authorization": f"Bearer {jwt.encode({'sub': user['sub'], 'role': user['role']}, SECRET_KEY, algorithm=ALGORITHM)}"}
-                )
-                event_data = event_response.json()
-                if event_data.get("organizerId") != user.get("sub"):
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete vendors for your own events")
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-                raise
-    
     db.delete(vendor)
     db.commit()
-
-
-
 
 if __name__ == "__main__":
     import uvicorn

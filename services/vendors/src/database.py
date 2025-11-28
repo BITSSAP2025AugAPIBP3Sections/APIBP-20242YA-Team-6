@@ -1,5 +1,5 @@
 """Database configuration and models for Vendors service."""
-from sqlalchemy import create_engine, Column, String, Integer
+from sqlalchemy import create_engine, Column, String, Integer, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -15,11 +15,11 @@ class Vendor(Base):
     """Vendor model."""
     __tablename__ = "vendors"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
+    id = Column(BigInteger, primary_key=True, index=True)
+    user_id = Column(String(50), unique=True, index=True, nullable=True)  # References auth service user.id
+    name = Column(String, nullable=True)  # Can be null initially, vendor updates after registration
     email = Column(String, unique=True, index=True, nullable=False)
-    phone = Column(String)
-    event_id = Column(String, nullable=False)
+    phone = Column(String, nullable=True)
 
 
 def get_db():
