@@ -1,8 +1,9 @@
 FROM node:20-alpine
 WORKDIR /app
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
+COPY services/events/package.json services/events/package-lock.json* services/events/pnpm-lock.yaml* ./
 RUN if [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm install --frozen-lockfile; else npm install --production=false; fi
-COPY src ./src
+COPY services/events/src ./src
+COPY proto ./proto
 EXPOSE 8002
 ENV NODE_ENV=production
 CMD ["node", "src/index.js"]
