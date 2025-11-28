@@ -135,7 +135,8 @@ export async function getVendorIdFromUserId(userId) {
         if (response.ok) {
             const data = await response.json();
             if (data.vendors && data.vendors.length > 0) {
-                const vendorId = parseInt(data.vendors[0].id);
+                // Keep as string to match database VARCHAR type
+                const vendorId = data.vendors[0].id;
                 console.log(`✅ Found vendor ID: ${vendorId} for user ${userId}`);
                 return vendorId;
             } else {

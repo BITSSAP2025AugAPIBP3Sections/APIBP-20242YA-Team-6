@@ -5,23 +5,30 @@ const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'kafka:9092').split(',');
 const kafka = new Kafka({
     clientId: 'tasks-service',
     brokers: KAFKA_BROKERS,
-    retry: { initialRetryTime: 100, retries: 8 }
+    retry: { initialRetryTime: 100, retries: 5 },
+    connectionTimeout: 10000
 });
 
 let producer = null;
+let isConnected = false;
 
 export async function initKafka() {
     try {
-        producer = kafka.producer();
+        producer = kafka.producer({ idempotent: true });
         await producer.connect();
+        isConnected = true;
         console.log('✅ Kafka producer connected');
     } catch (error) {
+        isConnected = false;
         console.error('⚠️  Kafka connection failed:', error.message);
     }
 }
 
-export async function publishNotification(recipientId, type, message, eventData = {}, recipientEmail = null) {
-    if (!producer) return;
+export async function publishNotification(recipientId, type, message, metadata = {}, recipientEmail = null) {
+    if (!producer || !isConnected) {
+        console.warn('⚠️  Skipping notification - Kafka not available');
+        return false;
+    }
     try {
         await producer.send({
             topic: 'notifications',
@@ -32,13 +39,22 @@ export async function publishNotification(recipientId, type, message, eventData 
                     recipientEmail,
                     type,
                     message,
-                    eventData,
-                    createdAt: new Date().toISOString()
+                    metadata,
+                    source: 'tasks-service',
+                    timestamp: new Date().toISOString()
                 })
             }]
         });
-        console.log(`📤 Notification published: ${type} to user ${recipientId}`);
+        return true;
     } catch (error) {
-        console.error('Error publishing notification:', error);
+        console.error('❌ Failed to publish notification:', error.message);
+        return false;
+    }
+}
+
+export async function disconnectKafka() {
+    if (producer) {
+        await producer.disconnect();
+        isConnected = false;
     }
 }
