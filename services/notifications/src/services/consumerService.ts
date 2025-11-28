@@ -7,7 +7,12 @@ export async function initConsumer(retryCount = 0, maxRetries = 5) {
   try {
     console.log(`🔄 Initializing Kafka consumer (attempt ${retryCount + 1}/${maxRetries + 1})`);
     
-    const consumer = kafka.consumer({ groupId: 'notifications-consumer' });
+    const consumer = kafka.consumer({ 
+      groupId: 'notifications-consumer',
+      sessionTimeout: 30000,
+      heartbeatInterval: 3000,
+      maxWaitTimeInMs: 5000
+    });
     setConsumer(consumer);
     
     await Promise.race([
@@ -18,33 +23,44 @@ export async function initConsumer(retryCount = 0, maxRetries = 5) {
     await consumer.subscribe({ topic: 'notifications', fromBeginning: false });
     
     await consumer.run({
-      eachMessage: async ({ topic, partition, message }: any) => {
-        try {
-          const notificationData = JSON.parse(message.value.toString());
-          
-          const notification: Notification = {
-            id: String(Date.now()),
-            recipientId: String(notificationData.recipientId),
-            recipientEmail: notificationData.recipientEmail,
-            type: notificationData.type,
-            message: notificationData.message,
-            createdAt: notificationData.createdAt || new Date().toISOString()
-          };
-          
-          addNotification(notification);
-          
-          console.log(`📬 Notification received and stored:`, {
-            id: notification.id,
-            type: notification.type,
-            recipientId: notification.recipientId,
-            message: notification.message.substring(0, 50) + '...'
-          });
-          
-          await sendEmail(notification, notification.recipientEmail);
-          
-        } catch (error) {
-          console.error('Error processing notification:', error);
+      eachBatchAutoResolve: false,
+      eachBatch: async ({ batch, resolveOffset, heartbeat, commitOffsetsIfNecessary }: any) => {
+        const notifications: Notification[] = [];
+        
+        for (const message of batch.messages) {
+          try {
+            const notificationData = JSON.parse(message.value.toString());
+            
+            const notification: Notification = {
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              recipientId: String(notificationData.recipientId),
+              recipientEmail: notificationData.recipientEmail,
+              type: notificationData.type,
+              message: notificationData.message,
+              createdAt: notificationData.timestamp || notificationData.createdAt || new Date().toISOString()
+            };
+            
+            notifications.push(notification);
+            addNotification(notification);
+            
+            resolveOffset(message.offset);
+          } catch (error) {
+            console.error('Error parsing notification:', error);
+            resolveOffset(message.offset);
+          }
         }
+        
+        if (notifications.length > 0) {
+          console.log(`📬 Processed batch: ${notifications.length} notifications`);
+          
+          // Send emails in parallel with error handling per email
+          await Promise.allSettled(
+            notifications.map(n => sendEmail(n, n.recipientEmail))
+          );
+        }
+        
+        await commitOffsetsIfNecessary();
+        await heartbeat();
       }
     });
     

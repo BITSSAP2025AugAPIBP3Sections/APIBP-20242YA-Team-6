@@ -13,7 +13,11 @@ let consumer: Consumer | null = null;
 
 export async function initProducer() {
   try {
-    producer = kafka.producer();
+    producer = kafka.producer({
+      idempotent: true,
+      maxInFlightRequests: 5,
+      transactionTimeout: 30000
+    });
     console.log('🔄 Connecting Kafka producer...');
     await Promise.race([
       producer.connect(),
