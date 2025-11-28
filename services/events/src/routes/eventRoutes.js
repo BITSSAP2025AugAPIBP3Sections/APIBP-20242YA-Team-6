@@ -6,7 +6,9 @@ import {
   createEvent, 
   getEventById, 
   updateEvent, 
-  deleteEvent 
+  deleteEvent,
+  createEventTask,
+  getEventTasks,
 } from '../controllers/eventController.js';
 import { 
   createEventValidation, 
@@ -29,5 +31,9 @@ router.post('/events', verifyToken, requireRole('admin', 'organizer'), createEve
 router.get('/events/:id', verifyToken, eventIdValidation, validate, getEventById);
 router.patch('/events/:id', verifyToken, requireRole('admin', 'organizer'), updateEventValidation, validate, updateEvent);
 router.delete('/events/:id', verifyToken, requireRole('admin', 'organizer'), eventIdValidation, validate, deleteEvent);
+
+// New nested resource endpoints
+router.post('/events/:eventId/tasks', verifyToken, requireRole('admin', 'organizer'), createEventTask);
+router.get('/events/:eventId/tasks', verifyToken, getEventTasks);
 
 export default router;

@@ -19,7 +19,7 @@ export async function initDB() {
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS events (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         location VARCHAR(255),
@@ -40,3 +40,4 @@ export async function initDB() {
 }
 
 export default pool;
+export { pool };

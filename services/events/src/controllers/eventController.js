@@ -1,7 +1,8 @@
 import pool from '../config/database.js';
-import { publishNotification } from '../config/kafka.js';
+import { publishNotification, publishNotificationBatch } from '../config/kafka.js';
 import { getUserEmail } from '../utils/externalServices.js';
 import { getEventStakeholders } from '../utils/stakeholders.js';
+import { executeEventDeletionSaga } from '../sagas/eventDeletionSaga.js';
 
 function buildPaginationInfo(page, pageSize, totalCount) {
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
@@ -276,31 +277,28 @@ export async function updateEvent(req, res) {
     if (startAt !== undefined && startAt !== currentEvent.start_at) changes.push(`start time to ${new Date(startAt).toLocaleDateString()}`);
     if (endAt !== undefined && endAt !== currentEvent.end_at) changes.push(`end time to ${new Date(endAt).toLocaleDateString()}`);
     
-    // Send notifications to all stakeholders if there are changes
+    // Send batch notifications to all stakeholders if there are changes
     if (changes.length > 0) {
       const userToken = req.headers.authorization?.replace('Bearer ', '');
       const stakeholders = await getEventStakeholders(id, userToken);
       const changeText = changes.length === 1 ? changes[0] : changes.slice(0, -1).join(', ') + ' and ' + changes.slice(-1);
       
-      for (const stakeholder of stakeholders) {
-        const roleEmoji = stakeholder.type === 'organizer' ? '👤' : stakeholder.type === 'vendor' ? '🏢' : '👥';
-        const roleText = stakeholder.type === 'organizer' ? 'organizer' : stakeholder.type === 'vendor' ? 'vendor' : 'attendee';
-        
-        await publishNotification(
-          stakeholder.id,
-          'event_updated',
-          `📢 Event "${updatedEvent.name}" has been updated! Changed: ${changeText}. ${roleEmoji} You are notified as ${roleText}.`,
-          { 
-            eventId: updatedEvent.id, 
-            eventName: updatedEvent.name, 
-            changes: changes,
-            location: updatedEvent.location,
-            startAt: updatedEvent.startAt,
-            endAt: updatedEvent.endAt
-          },
-          stakeholder.email
-        );
-      }
+      const notifications = stakeholders.map(stakeholder => ({
+        recipientId: stakeholder.id,
+        recipientEmail: stakeholder.email,
+        type: 'event_updated',
+        message: `📢 Event "${updatedEvent.name}" has been updated! Changed: ${changeText}`,
+        metadata: { 
+          eventId: updatedEvent.id, 
+          eventName: updatedEvent.name, 
+          changes: changes,
+          location: updatedEvent.location,
+          startAt: updatedEvent.startAt,
+          endAt: updatedEvent.endAt
+        }
+      }));
+      
+      await publishNotificationBatch(notifications);
     }
     
     res.json(updatedEvent);
@@ -314,30 +312,125 @@ export async function deleteEvent(req, res) {
   try {
     const { id } = req.params;
     
-    // Check event ownership for organizers
-    if (req.user.role === 'organizer') {
-      const checkResult = await pool.query(
-        'SELECT organizer_id FROM events WHERE id = $1',
-        [id]
-      );
-      if (checkResult.rows.length === 0) {
-        return res.status(404).json({ detail: 'Event not found' });
-      }
-      if (checkResult.rows[0].organizer_id !== req.user.sub) {
-        return res.status(403).json({ detail: 'You can only delete your own events' });
-      }
-    }
+    // Verify event exists and check permissions
+    const eventResult = await pool.query(
+      'SELECT id, name, organizer_id FROM events WHERE id = $1',
+      [id]
+    );
     
-    const result = await pool.query('DELETE FROM events WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) {
+    if (eventResult.rows.length === 0) {
       return res.status(404).json({ detail: 'Event not found' });
     }
-    res.status(204).send();
-  } catch (error) {
-    console.error('Error deleting event:', error);
-    if (error.code === '23503') {
-      return res.status(409).json({ detail: 'Cannot delete event with existing dependencies' });
+    
+    const event = eventResult.rows[0];
+    
+    // Check event ownership for organizers
+    if (req.user.role === 'organizer' && event.organizer_id !== req.user.sub) {
+      return res.status(403).json({ detail: 'You can only delete your own events' });
     }
+    
+    // Execute saga for orchestrated deletion with compensation
+    const result = await executeEventDeletionSaga(id, req.headers.authorization);
+    
+    if (result.success) {
+      console.log(`🎉 Event ${id} deleted successfully via saga`);
+      res.status(204).send();
+    } else {
+      console.error(`❌ Event deletion saga failed: ${result.error}`);
+      
+      // Map saga errors to HTTP responses
+      if (result.error === 'EVENT_NOT_FOUND') {
+        return res.status(404).json({ detail: 'Event not found' });
+      } else if (result.error === 'TASKS_DELETION_FAILED') {
+        return res.status(500).json({ detail: 'Failed to delete associated tasks' });
+      } else if (result.error === 'ATTENDEES_DELETION_FAILED') {
+        return res.status(500).json({ detail: 'Failed to delete associated attendees' });
+      } else if (result.error === 'EVENT_DELETION_FAILED') {
+        return res.status(500).json({ detail: 'Failed to delete event' });
+      } else {
+        return res.status(500).json({ detail: 'Event deletion failed' });
+      }
+    }
+  } catch (error) {
+    console.error('❌ Unexpected error in deleteEvent controller:', error);
+    res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+export async function createEventTask(req, res) {
+  try {
+    const { eventId } = req.params;
+    const { title, description, status, vendorId } = req.body;
+    
+    // Verify event exists and user has permission
+    const eventResult = await pool.query(
+      'SELECT organizer_id FROM events WHERE id = $1',
+      [eventId]
+    );
+    
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ detail: 'Event not found' });
+    }
+    
+    if (req.user.role === 'organizer' && eventResult.rows[0].organizer_id !== req.user.sub) {
+      return res.status(403).json({ detail: 'You can only create tasks for your own events' });
+    }
+    
+    // Call Tasks service to create task
+    const response = await fetch('http://tasks-service:8004/v1/tasks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization
+      },
+      body: JSON.stringify({
+        title,
+        description,
+        status: status || 'pending',
+        eventId: parseInt(eventId),
+        vendorId: vendorId ? parseInt(vendorId) : null,
+        organizerId: req.user.sub
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      return res.status(response.status).json(error);
+    }
+    
+    const task = await response.json();
+    res.status(201).json(task);
+  } catch (error) {
+    console.error('Error creating event task:', error);
+    res.status(500).json({ detail: 'Internal server error' });
+  }
+}
+
+export async function getEventTasks(req, res) {
+  try {
+    const { eventId } = req.params;
+    
+    // Verify event exists
+    const eventResult = await pool.query('SELECT id FROM events WHERE id = $1', [eventId]);
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ detail: 'Event not found' });
+    }
+    
+    // Call Tasks service
+    const response = await fetch(`http://tasks-service:8004/v1/tasks?eventId=${eventId}`, {
+      headers: {
+        'Authorization': req.headers.authorization
+      }
+    });
+    
+    if (!response.ok) {
+      return res.status(response.status).json(await response.json());
+    }
+    
+    const tasks = await response.json();
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching event tasks:', error);
     res.status(500).json({ detail: 'Internal server error' });
   }
 }
