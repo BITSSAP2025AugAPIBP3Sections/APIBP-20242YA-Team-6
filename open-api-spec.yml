@@ -1,10 +1,14 @@
 openapi: 3.1.0
 info:
   title: Event Management API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     RESTful API for the Event Management MVP covering Authentication, Events, Vendors, Tasks, Notifications, and Attendees.
     Supports JWT-based authentication and modular microservice structure.
+    
+    **Version 1.2.0 Changes:**
+    - Vendors are now global entities (removed eventId from vendor schemas)
+    - Tasks can only be created via POST /events/{eventId}/tasks
 
 servers:
   - url: http://localhost:8000/v1
@@ -91,12 +95,11 @@ components:
         phone:
           type: string
           nullable: true
-        eventId:
-          type: string
+      description: Vendor entity - global catalog not tied to specific events
     
     VendorCreate:
       type: object
-      required: [name, email, eventId]
+      required: [name, email]
       properties:
         name:
           type: string
@@ -106,8 +109,7 @@ components:
         phone:
           type: string
           nullable: true
-        eventId:
-          type: string
+      description: Create a vendor in the global vendor catalog
     
     VendorUpdate:
       type: object
@@ -120,8 +122,7 @@ components:
         phone:
           type: string
           nullable: true
-        eventId:
-          type: string
+      description: Update vendor information
     
     PaginatedVendorResponse:
       type: object
@@ -197,6 +198,26 @@ components:
             $ref: "#/components/schemas/Task"
         pagination:
           $ref: "#/components/schemas/PaginationInfo"
+
+    CreateEventTask:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          description: Task title
+        description:
+          type: string
+          description: Task description
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+          default: pending
+          description: Task status
+        vendorId:
+          type: string
+          nullable: true
+          description: ID of vendor assigned to this task
 
     PaginationInfo:
       type: object
@@ -468,6 +489,11 @@ paths:
         - **Sorting**: Use `sort_by` and `sort_order` parameters
         - **Filtering**: Filter by name, location, organizerId, or use global search
         - **Field Selection**: Use `fields` parameter to specify which fields to return
+        
+        **Role-based access:**
+        - **Admins/Organizers**: Can view all events
+        - **Vendors**: Can view events where they have assigned tasks (filtered automatically)
+        - **Attendees**: Can view all events
       security:
         - bearerAuth: []
       parameters:
@@ -663,6 +689,12 @@ paths:
     get:
       tags: [Events]
       summary: Get single event by ID
+      description: |
+        Retrieve detailed information about a specific event.
+        
+        **Role-based access:**
+        - **Admins/Organizers/Attendees**: Can view any event
+        - **Vendors**: Can view events where they have assigned tasks
       security:
         - bearerAuth: []
       parameters:
@@ -746,6 +778,89 @@ paths:
           description: Event not found - Invalid event ID
         "409":
           description: Conflict - Cannot delete event with existing dependencies
+        "500":
+          description: Internal server error
+
+  /events/{eventId}/tasks:
+    post:
+      tags: [Events]
+      summary: Create a task for a specific event
+      description: |
+        Creates a new task associated with the specified event.
+        **Note:** This is the ONLY way to create tasks. Direct POST to /tasks has been removed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the event to create task for
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventTask"
+            examples:
+              withVendor:
+                summary: Task with vendor assignment
+                value:
+                  title: "Setup sound system"
+                  description: "Install and test audio equipment"
+                  status: "pending"
+                  vendorId: "123"
+              withoutVendor:
+                summary: Task without vendor
+                value:
+                  title: "Send invitations"
+                  description: "Email all attendees"
+                  status: "pending"
+      responses:
+        "201":
+          description: Task created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Bad request - Invalid input data
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Only admins and organizers can create tasks
+        "404":
+          description: Event not found
+        "500":
+          description: Internal server error
+
+    get:
+      tags: [Events]
+      summary: Get all tasks for a specific event
+      description: Retrieve a paginated list of tasks associated with the specified event
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the event to get tasks for
+      responses:
+        "200":
+          description: List of tasks for the event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskPaginationResponse"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Event not found
         "500":
           description: Internal server error
 
@@ -1120,7 +1235,15 @@ paths:
   /vendors:
     get:
       tags: [Vendors]
-      summary: List vendors with advanced filtering, sorting, pagination, and field selection
+      summary: List vendors from global catalog
+      description: |
+        List vendors with advanced filtering, sorting, pagination, and field selection.
+        **Note:** Vendors are global entities not tied to specific events.
+        
+        **Role-based results:**
+        - **Admins**: Can view all vendors
+        - **Organizers**: Can view all vendors (for task assignment)
+        - **Vendors**: Can only view their own profile (auto-filtered by user_id)
       security:
         - bearerAuth: []
       parameters:
@@ -1144,7 +1267,7 @@ paths:
           description: Field to sort by
           schema:
             type: string
-            enum: [id, name, email, phone, eventId]
+            enum: [id, name, email, phone]
             default: id
         - name: sort_order
           in: query
@@ -1174,11 +1297,6 @@ paths:
           description: Filter by vendor phone (partial match)
           schema:
             type: string
-        - name: eventId
-          in: query
-          description: Filter by event ID (partial match)
-          schema:
-            type: string
         - name: search
           in: query
           description: Global search across all text fields
@@ -1202,7 +1320,14 @@ paths:
 
     post:
       tags: [Vendors]
-      summary: Create vendor
+      summary: Create vendor in global catalog
+      description: |
+        Manually create a new vendor in the global vendor catalog.
+        
+        **Note:** Vendors are typically auto-created when users register with role='vendor'.
+        This endpoint is for admin use only (e.g., importing vendors, system management).
+        
+        **Permissions:** Admin only
       security:
         - bearerAuth: []
       requestBody:
@@ -1269,7 +1394,16 @@ paths:
 
     patch:
       tags: [Vendors]
-      summary: Update vendor
+      summary: Update vendor information
+      description: |
+        Update vendor profile information.
+        
+        **Role-based access:**
+        - **Vendors**: Can only update their own profile (matched by user_id). Cannot change email.
+        - **Admins**: Can update any vendor profile including email (for system management).
+        - **Organizers**: Cannot update vendors (vendors are independent entities).
+        
+        **Note**: Vendors should use their vendor ID (from GET /vendors/me) to update their profile.
       security:
         - bearerAuth: []
       parameters:
@@ -1278,11 +1412,24 @@ paths:
           required: true
           schema:
             type: integer
+          description: Vendor ID to update
       requestBody:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/VendorUpdate"
+            examples:
+              vendorSelfUpdate:
+                summary: Vendor updating own profile (name and phone only)
+                value:
+                  name: "John's Premium Catering"
+                  phone: "+1234567890"
+              adminUpdate:
+                summary: Admin updating vendor profile (full access)
+                value:
+                  name: "John's Catering"
+                  email: "newemail@catering.com"
+                  phone: "+1234567890"
       responses:
         "200":
           description: Updated vendor
@@ -1291,11 +1438,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Vendor"
         "400":
-          description: Bad request - Invalid input data
+          description: Bad request - Invalid input data or vendor trying to change email
         "401":
           description: Unauthorized - JWT token missing or invalid
         "403":
-          description: Forbidden - Valid token but insufficient permissions
+          description: Forbidden - Vendor trying to update another vendor's profile
         "404":
           description: Vendor not found - Invalid vendor ID
         "409":
@@ -1307,7 +1454,13 @@ paths:
 
     delete:
       tags: [Vendors]
-      summary: Delete vendor
+      summary: Delete vendor from global catalog
+      description: |
+        Delete a vendor from the global catalog.
+        
+        **Permissions:** Admin only
+        
+        **Warning:** This operation should be used carefully as it may affect historical data.
       security:
         - bearerAuth: []
       parameters:
@@ -1387,14 +1540,17 @@ paths:
           description: Too many requests - Notification rate limit exceeded
         "500":
           description: Internal server error
-  
+
   ##############################
   # TASKS SERVICE
   ##############################
   /tasks:
     get:
       tags: [Tasks]
-      summary: List all tasks with pagination, filtering, sorting, and field selection
+      summary: List all tasks
+      description: |
+        List all tasks with pagination, filtering, sorting, and field selection.
+        **Note:** To create tasks, use POST /events/{eventId}/tasks instead.
       security:
         - bearerAuth: []
       parameters:
@@ -1520,38 +1676,9 @@ paths:
           description: Validation error - Query parameters validation failed
         "500":
           description: Internal server error
- 
-    post:
-      tags: [Tasks]
-      summary: Create task
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Task"
-      responses:
-        "201":
-          description: Task created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Task"
-        "400":
-          description: Bad request - Invalid task data or missing required fields
-        "401":
-          description: Unauthorized - JWT token missing or invalid
-        "403":
-          description: Forbidden - Valid token but insufficient permissions
-        "404":
-          description: Event or vendor not found - Invalid event ID or vendor ID
-        "422":
-          description: Validation error - Request body validation failed
-        "500":
-          description: Internal server error
- 
+
+  # Note: POST /tasks has been REMOVED - use POST /events/{eventId}/tasks instead
+
   /tasks/{id}:
     get:
       tags: [Tasks]
