@@ -22,6 +22,9 @@ spec:
           image: shrutim07/tasks-service:v1
           ports:
             - containerPort: 8004
+              name: http
+            - containerPort: 50051
+              name: grpc
           env:
             - name: ENVIRONMENT
               value: development

@@ -25,5 +25,9 @@ spec:
       targetPort: 8004
       protocol: TCP
       name: http
+    - port: 50051
+      targetPort: 50051
+      protocol: TCP
+      name: grpc
   selector:
     app: tasks-service

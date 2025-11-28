@@ -39,6 +39,14 @@ spec:
               value: your-super-secret-jwt-key-change-in-production
             - name: KAFKA_BROKERS
               value: kafka.kafka.svc.cluster.local:9092
+            - name: TASKS_GRPC_HOST
+              value: tasks-service.event-management.svc.cluster.local
+            - name: TASKS_GRPC_PORT
+              value: "50051"
+            - name: ATTENDEES_GRPC_HOST
+              value: attendees-service.event-management.svc.cluster.local
+            - name: ATTENDEES_GRPC_PORT
+              value: "50052"
           livenessProbe:
             httpGet:
               path: /health
