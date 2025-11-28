@@ -1,5 +1,5 @@
 """Database configuration and models for Auth service."""
-from sqlalchemy import create_engine, Column, String, Integer, Enum as SQLEnum
+from sqlalchemy import create_engine, Column, String, Integer, BigInteger, Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -24,7 +24,7 @@ class User(Base):
     """User model."""
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BigInteger, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(SQLEnum(UserRole), nullable=False, default=UserRole.ATTENDEE)

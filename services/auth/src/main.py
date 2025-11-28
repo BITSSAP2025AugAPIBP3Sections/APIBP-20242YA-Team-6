@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
 from src.database import get_db, init_db, User as DBUser, UserRole
+from src.kafka_producer import kafka_producer
 
 load_dotenv()
 
@@ -81,6 +82,11 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    await kafka_producer.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await kafka_producer.stop()
 
 @app.get("/health")
 async def health_check():
@@ -96,6 +102,11 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    # Publish vendor registration event to Kafka if user registered as vendor
+    if user_data.role == UserRole.VENDOR:
+        await kafka_producer.publish_vendor_registration(new_user.id, new_user.email)
+    
     return UserResponse(id=str(new_user.id), email=new_user.email, role=new_user.role.value)
 
 @app.post("/v1/auth/login", response_model=Token)
@@ -125,6 +136,43 @@ async def search_user_by_email(email: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return UserResponse(id=str(user.id), email=user.email, role=user.role.value)
+
+@app.post("/v1/auth/sync/vendors", status_code=status.HTTP_200_OK)
+async def sync_vendors(db: Session = Depends(get_db)):
+    """
+    Manual sync endpoint to republish vendor registration events for all existing vendors.
+    Useful when Kafka was unavailable during initial vendor registrations.
+    """
+    try:
+        # Get all users with VENDOR role
+        vendors = db.query(DBUser).filter(DBUser.role == UserRole.VENDOR).all()
+        
+        if not vendors:
+            return {"message": "No vendors found to sync", "synced_count": 0}
+        
+        synced_count = 0
+        failed_count = 0
+        
+        for vendor in vendors:
+            try:
+                await kafka_producer.publish_vendor_registration(vendor.id, vendor.email)
+                synced_count += 1
+                print(f"✅ Synced vendor: user_id={vendor.id}, email={vendor.email}")
+            except Exception as e:
+                failed_count += 1
+                print(f"❌ Failed to sync vendor {vendor.id}: {e}")
+        
+        return {
+            "message": f"Vendor sync completed",
+            "total_vendors": len(vendors),
+            "synced_count": synced_count,
+            "failed_count": failed_count
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Vendor sync failed: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
