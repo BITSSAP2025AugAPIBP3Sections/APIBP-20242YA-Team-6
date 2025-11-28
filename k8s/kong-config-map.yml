@@ -123,7 +123,6 @@ data:
           - https_redirect_status_code: 426
             methods:
               - GET
-              - POST
               - OPTIONS
             name: attendees-by-event
             path_handling: v0
@@ -139,12 +138,29 @@ data:
             strip_path: false
           - https_redirect_status_code: 426
             methods:
-              - GET
+              - POST
+              - PUT
               - OPTIONS
-            name: attendees-detail
+            name: event-rsvps
             path_handling: v0
             paths:
-              - ~/v1/attendees/\d+
+              - ~/v1/events/\d+/rsvps
+            preserve_host: false
+            protocols:
+              - http
+              - https
+            regex_priority: 100
+            request_buffering: true
+            response_buffering: true
+            strip_path: false
+          - https_redirect_status_code: 426
+            methods:
+              - GET
+              - OPTIONS
+            name: rsvps-detail
+            path_handling: v0
+            paths:
+              - ~/v1/rsvps/\d+
             preserve_host: false
             protocols:
               - http
@@ -157,10 +173,10 @@ data:
             methods:
               - GET
               - OPTIONS
-            name: attendees-list
+            name: rsvps-list
             path_handling: v0
             paths:
-              - /v1/attendees
+              - /v1/rsvps
             preserve_host: false
             protocols:
               - http
