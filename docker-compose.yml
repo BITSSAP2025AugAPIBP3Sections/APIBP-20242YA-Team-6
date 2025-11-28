@@ -199,15 +199,18 @@ services:
     ports:
       - "3001:8001"
     depends_on:
-      - auth-db
+      auth-db:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - event-management-net
     restart: unless-stopped
 
   events-service:
     build: 
-      context: ./services/events
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/events/Dockerfile
     environment:
       - NODE_ENV=development
       - DB_HOST=events-db
@@ -216,6 +219,11 @@ services:
       - DB_NAME=events
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - PORT=8002
+      - TASKS_GRPC_HOST=tasks-service
+      - TASKS_GRPC_PORT=50051
+      - ATTENDEES_GRPC_HOST=attendees-service
+      - ATTENDEES_GRPC_PORT=50052
+      - KAFKA_BROKERS=kafka:9092
     ports:
       - "3002:8002"
     depends_on:
@@ -236,15 +244,18 @@ services:
     ports:
       - "3003:8003"
     depends_on:
-      - vendors-db
+      vendors-db:
+        condition: service_started
+      kafka:
+        condition: service_healthy
     networks:
       - event-management-net
     restart: unless-stopped
 
   tasks-service:
     build: 
-      context: ./services/tasks
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/tasks/Dockerfile
     environment:
       - NODE_ENV=development
       - DB_HOST=tasks-db
@@ -253,6 +264,8 @@ services:
       - DB_NAME=tasks
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - PORT=8004
+      - GRPC_PORT=50051
+      - KAFKA_BROKERS=kafka:9092
     ports:
       - "3004:8004"
     depends_on:
@@ -263,8 +276,8 @@ services:
 
   attendees-service:
     build: 
-      context: ./services/attendees
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/attendees/Dockerfile
     environment:
       - NODE_ENV=development
       - DB_HOST=attendees-db
@@ -273,6 +286,9 @@ services:
       - DB_NAME=attendees
       - JWT_SECRET=your-super-secret-jwt-key-change-in-production
       - PORT=8005
+      - GRPC_PORT=50052
+      - KAFKA_BROKERS=kafka:9092
+      - AUTH_SERVICE_URL=http://auth-service:8001
     ports:
       - "3005:8005"
     depends_on:
