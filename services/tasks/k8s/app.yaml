@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z tasks-db 5432; do echo waiting for db; sleep 2; done']
       containers:
         - name: tasks-service
-          image: shrutim07/tasks-service:v1
+          image: kaifcoder/tasks-service:v4
           ports:
             - containerPort: 8004
               name: http

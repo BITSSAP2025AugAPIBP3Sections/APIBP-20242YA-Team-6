@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z auth-db 5432; do echo waiting for db; sleep 2; done']
       containers:
         - name: auth-service
-          image: kaifcoder/auth-service:v1
+          image: kaifcoder/auth-service:v4
           ports:
             - containerPort: 8001
           env:

@@ -44,7 +44,7 @@ spec:
     spec:
       containers:
       - name: graphql-bff
-        image: kaifcoder/graphql-bff:v1  
+        image: kaifcoder/graphql-bff-service:v4  
         ports:
         - containerPort: 4000
           name: graphql

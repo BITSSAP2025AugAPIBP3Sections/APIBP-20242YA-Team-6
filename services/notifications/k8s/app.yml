@@ -19,7 +19,7 @@ spec:
           command: ['sh', '-c', 'until nc -z kafka.kafka.svc.cluster.local 9092; do echo waiting for kafka; sleep 2; done']
       containers:
         - name: notifications-service
-          image: kaifcoder/notifications-service:v1
+          image: kaifcoder/notifications-service:v4
           ports:
             - containerPort: 8006
           env:
