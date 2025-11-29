@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: istio
   rules:
-    - host: graphql.c-282f7f4.kyma.ondemand.com
+    - host: graphql.c-8c5e74f.kyma.ondemand.com
       http:
         paths:
         - path: /
@@ -20,5 +20,5 @@ spec:
                 number: 4000
   tls:
     - hosts:
-      - graphql.c-282f7f4.kyma.ondemand.com
+      - graphql.c-8c5e74f.kyma.ondemand.com
       secretName: kyma-gateway-certs

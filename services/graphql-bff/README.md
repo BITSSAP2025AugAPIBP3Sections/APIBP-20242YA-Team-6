@@ -86,7 +86,7 @@ kubectl get pods -n event-management -l app=graphql-bff
 kubectl logs -n event-management -l app=graphql-bff
 ```
 
-Access at: `https://graphql.c-282f7f4.kyma.ondemand.com/graphql`
+Access at: `https://graphql.c-8c5e74f.kyma.ondemand.com/graphql`
 
 ## 📖 GraphQL Schema
 

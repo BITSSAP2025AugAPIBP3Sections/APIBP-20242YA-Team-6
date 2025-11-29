@@ -1,7 +1,7 @@
 // Global State
 let currentUser = null;
 let authToken = null;
-let apiBaseUrl = 'https://event-management-api.c-282f7f4.kyma.ondemand.com';
+let apiBaseUrl = 'https://event-management-api.c-8c5e74f.kyma.ondemand.com';
 
 // Quick login credentials
 const QUICK_LOGIN = {

@@ -6,7 +6,7 @@ Concise REST API demonstration using Swagger UI with 4-person scenario.
 
 **Access Swagger UI**: 
 - **Local**: http://localhost:8000
-- **Production**: https://event-management-api.c-282f7f4.kyma.ondemand.com/v1
+- **Production**: https://event-management-api.c-8c5e74f.kyma.ondemand.com/v1
 
 **Setup**: Click any endpoint → "Try it out" → Fill parameters → "Execute"
 

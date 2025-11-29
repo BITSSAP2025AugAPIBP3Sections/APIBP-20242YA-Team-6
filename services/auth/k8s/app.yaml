@@ -31,6 +31,8 @@ spec:
               value: postgresql://auth:authpw@auth-db:5432/auth
             - name: SECRET_KEY
               value: your-super-secret-jwt-key-change-in-production
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka.kafka.svc.cluster.local:9092
           resources:
             requests:
               memory: "256Mi"

@@ -19,7 +19,7 @@ info:
 servers:
   - url: http://localhost:8000/v1
     description: Local development server
-  - url: https://event-management-api.c-282f7f4.kyma.ondemand.com/v1
+  - url: https://event-management-api.c-8c5e74f.kyma.ondemand.com/v1
     description: Production server
 
 tags:

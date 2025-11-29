@@ -33,11 +33,11 @@ env:
   admin_api_uri: http://kong-kong-admin.kong.svc.cluster.local:8001
   
   # Manager URL (what users access in browser)
-  admin_gui_url: https://kong-manager.c-282f7f4.kyma.ondemand.com
+  admin_gui_url: https://kong-manager.c-8c5e74f.kyma.ondemand.com
   
   # Admin API URL (what Manager uses in browser to fetch data)
   # This should point to your EXTERNAL Admin API URL via Istio
-  admin_gui_api_url: https://kong-admin.c-282f7f4.kyma.ondemand.com
+  admin_gui_api_url: https://kong-admin.c-8c5e74f.kyma.ondemand.com
   
   # Listeners
   admin_listen: 0.0.0.0:8001  # HTTP only
