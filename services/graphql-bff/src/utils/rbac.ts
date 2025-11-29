@@ -73,7 +73,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RBACPermissions> = {
     // Vendors
     canCreateVendor: true,
     canUpdateVendor: true,
-    canDeleteVendor: true, // Can delete vendors for own events
+    canDeleteVendor: false, // Only admins can delete vendors (vendors are global)
 
     // Tasks
     canCreateTask: true,

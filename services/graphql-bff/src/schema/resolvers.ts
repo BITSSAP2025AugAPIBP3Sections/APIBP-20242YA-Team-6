@@ -220,13 +220,13 @@ export const resolvers = {
 
       const [userData, rsvps, tasks, notifications] = await Promise.all([
         dataSources.authService.get(`/v1/users/${user.id}`),
-        dataSources.attendeesService.get('/v1/attendees', { userId: user.id, limit: 100 }),
+        dataSources.attendeesService.get('/v1/rsvps', { page_size: 100 }), // User's own RSVPs endpoint
         dataSources.tasksService.get('/v1/tasks', { userId: user.id, limit: 100 }),
         dataSources.notificationsService.get('/v1/notifications', { recipientId: user.id, read: false, limit: 50 }),
       ]);
 
       // Get events from RSVPs
-      const eventIds = rsvps.data?.map((r: any) => r.eventId) || [];
+      const eventIds = rsvps.attendees?.map((r: any) => r.eventId) || [];
       const events = eventIds.length > 0
         ? await Promise.all(eventIds.map((eid: number) => dataSources.eventsService.get(`/v1/events/${eid}`).catch(() => null)))
         : [];
@@ -234,7 +234,7 @@ export const resolvers = {
       return {
         user: userData,
         upcomingEvents: events.filter(Boolean),
-        myRSVPs: rsvps.data || [],
+        myRSVPs: rsvps.attendees || [],
         myTasks: tasks.data || [],
         unreadNotifications: notifications.data || [],
       };
@@ -290,47 +290,15 @@ export const resolvers = {
     // Vendors
     createVendor: async (_: any, args: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateVendor');
-      
-      // Organizers can only create vendors for their own events
-      if (user.role === 'organizer') {
-        const event = await dataSources.eventsService.get(`/v1/events/${args.eventId}`);
-        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
-      }
-      
-      // Convert eventId to string as vendors service expects
-      const vendorData = { ...args, eventId: String(args.eventId) };
-      return dataSources.vendorsService.post('/v1/vendors', vendorData);
+      return dataSources.vendorsService.post('/v1/vendors', args);
     },
     updateVendor: async (_: any, { id, ...updates }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateVendor');
-      
-      // Get the vendor to check event ownership
-      const vendor = await dataSources.vendorsService.get(`/v1/vendors/${id}`);
-      
-      // Organizers can only update vendors for their own events
-      if (user.role === 'organizer') {
-        const event = await dataSources.eventsService.get(`/v1/events/${vendor.eventId}`);
-        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
-      }
-      
-      // Convert eventId to string if present
-      if (updates.eventId !== undefined) {
-        updates.eventId = String(updates.eventId);
-      }
       return dataSources.vendorsService.patch(`/v1/vendors/${id}`, updates);
     },
     deleteVendor: async (_: any, { id }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canDeleteVendor');
-      
-      // Get the vendor to check event ownership
-      const vendor = await dataSources.vendorsService.get(`/v1/vendors/${id}`);
-      
-      // Organizers can only delete vendors for their own events (though permission is false by default)
-      if (user.role === 'organizer') {
-        const event = await dataSources.eventsService.get(`/v1/events/${vendor.eventId}`);
-        AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
-      }
-      
+      // Only admins can delete vendors (vendors are global entities)
       await dataSources.vendorsService.delete(`/v1/vendors/${id}`);
       return true;
     },
@@ -339,13 +307,16 @@ export const resolvers = {
     createTask: async (_: any, args: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateTask');
       
+      const { eventId, ...taskData } = args;
+      
       // Organizers can only create tasks for their own events
       if (user.role === 'organizer') {
-        const event = await dataSources.eventsService.get(`/v1/events/${args.eventId}`);
+        const event = await dataSources.eventsService.get(`/v1/events/${eventId}`);
         AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
       }
       
-      return dataSources.tasksService.post('/v1/tasks', args);
+      // Tasks can only be created via POST /events/{eventId}/tasks
+      return dataSources.eventsService.post(`/v1/events/${eventId}/tasks`, taskData);
     },
     updateTask: async (_: any, { id, ...updates }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateTask');
@@ -383,28 +354,22 @@ export const resolvers = {
     },
 
     // Attendees
-    createRSVP: async (_: any, args: any, { dataSources, user }: any) => {
+    createRSVP: async (_: any, { eventId, status }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canCreateRSVP');
-      return dataSources.attendeesService.post('/v1/attendees', { ...args, userId: user.id });
+      // Use new RESTful pattern: POST /events/{eventId}/rsvps?status=going
+      return dataSources.attendeesService.post(`/v1/events/${eventId}/rsvps?status=${status}`);
     },
-    updateRSVP: async (_: any, { id, status }: any, { dataSources, user }: any) => {
+    updateRSVP: async (_: any, { eventId, status }: any, { dataSources, user }: any) => {
       AuthorizationService.requirePermission(user?.role, 'canUpdateRSVP');
-      
-      // Get the RSVP to check ownership
-      const rsvp = await dataSources.attendeesService.get(`/v1/attendees/${id}`);
-      
-      // Attendees can only update their own RSVPs
-      if (user.role === 'attendee' && rsvp.userId !== user.id) {
-        throw new RBACError('You can only update your own RSVPs');
-      }
       
       // Organizers can only update RSVPs for their own events
       if (user.role === 'organizer') {
-        const event = await dataSources.eventsService.get(`/v1/events/${rsvp.eventId}`);
+        const event = await dataSources.eventsService.get(`/v1/events/${eventId}`);
         AuthorizationService.requireEventOwnership(user.role, user.id, event.organizerId);
       }
       
-      return dataSources.attendeesService.patch(`/v1/attendees/${id}/rsvp`, { status });
+      // Use new RESTful pattern: PUT /events/{eventId}/rsvps?status=interested
+      return dataSources.attendeesService.put(`/v1/events/${eventId}/rsvps?status=${status}`);
     },
 
     // Notifications

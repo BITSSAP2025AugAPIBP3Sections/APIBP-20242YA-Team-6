@@ -41,6 +41,11 @@ export class MicroserviceClient {
     return response.data;
   }
 
+  async put<T>(path: string, data?: any): Promise<T> {
+    const response = await this.client.put<T>(path, data);
+    return response.data;
+  }
+
   async patch<T>(path: string, data?: any): Promise<T> {
     const response = await this.client.patch<T>(path, data);
     return response.data;

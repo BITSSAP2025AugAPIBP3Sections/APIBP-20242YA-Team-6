@@ -28,7 +28,6 @@ export const typeDefs = `#graphql
     name: String!
     email: String!
     phone: String
-    eventId: Int!
     createdAt: String
     updatedAt: String
     tasks: [Task!]
@@ -171,7 +170,6 @@ export const typeDefs = `#graphql
       name: String!
       email: String!
       phone: String
-      eventId: Int!
     ): Vendor!
     updateVendor(
       id: ID!
@@ -184,8 +182,8 @@ export const typeDefs = `#graphql
     # Tasks
     createTask(
       title: String!
-      description: String!
-      status: String!
+      description: String
+      status: String
       eventId: Int!
       vendorId: Int
     ): Task!
@@ -200,7 +198,7 @@ export const typeDefs = `#graphql
 
     # Attendees
     createRSVP(eventId: Int!, status: String!): Attendee!
-    updateRSVP(id: ID!, status: String!): Attendee!
+    updateRSVP(eventId: Int!, status: String!): Attendee!
 
     # Notifications
     createNotification(
